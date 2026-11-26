@@ -209,24 +209,52 @@ else
                             <div class="lib-grid lib-list">
                                 @foreach (var lib in libraries)
                                 {
-                                    <div class="lib-card @(currentLibId==lib.Id?"on":"")" @onclick="()=>SelectLibrary(lib.Id)">
-                                        <div class="lib-card-head">
-                                            <span class="lib-name" title="@lib.Name">@lib.Name</span>
-                                            <span class="lib-actions">
-                                                <button @onclick:stopPropagation="true" @onclick="()=>EditLibrary(lib)" title="@I18n["edit"]">✎</button>
-                                                <button class="danger" @onclick:stopPropagation="true" @onclick="()=>RemoveLibrary(lib)" title="@I18n["delete"]">×</button>
-                                            </span>
+                                    if (libFormOpen && libEditing && libEditingId == lib.Id)
+                                    {
+                                        @* 编辑：就地在原卡片位置展开表单，保存/取消后原地复原 *@
+                                        <div class="lib-card editing">
+                                            <div class="lib-card-head">
+                                                <span class="lib-name">@(I18n.Lang=="zh"?"编辑发布库":"Edit library")</span>
+                                                <span class="lib-actions" style="opacity:1">
+                                                    <button @onclick="()=>libFormOpen=false" title="@I18n["cancel"]">×</button>
+                                                </span>
+                                            </div>
+                                            <label>@I18n["libraryName"]</label>
+                                            <input @bind="libName" placeholder="@(I18n.Lang=="zh"?"例如：软件下载 / 内部工具":"e.g. Software / Internal Tools")" />
+                                            <label>@I18n["description"]</label>
+                                            <input @bind="libDesc" />
+                                            <div class="checks">
+                                                <label><input type="checkbox" @bind="libWeb" /> @I18n["visibleOnWeb"]</label>
+                                                <label><input type="checkbox" @bind="libClient" /> @I18n["visibleOnClient"]</label>
+                                            </div>
+                                            <div class="btn-row">
+                                                <button class="primary" @onclick="SaveLibrary">@I18n["save"]</button>
+                                                <button @onclick="()=>libFormOpen=false">@I18n["cancel"]</button>
+                                            </div>
+                                            @if (libMsg != null) { <p class="msg err">@libMsg</p> }
                                         </div>
-                                        <div class="lib-count"><b>@lib.LinkCount</b>@(I18n.Lang=="zh"?" 条链接":" links")</div>
-                                        <div class="lib-channels">
-                                            <button type="button" class="ch-pill @(lib.VisibleOnWeb?"on":"off")" @onclick:stopPropagation="true"
-                                                    @onclick="()=>ToggleChannel(lib, true)"
-                                                    title="@(I18n.Lang=="zh"?"点击切换是否在网页端显示":"Toggle web visibility")">@I18n["web"]</button>
-                                            <button type="button" class="ch-pill @(lib.VisibleOnClient?"on":"off")" @onclick:stopPropagation="true"
-                                                    @onclick="()=>ToggleChannel(lib, false)"
-                                                    title="@(I18n.Lang=="zh"?"点击切换是否在客户端显示":"Toggle client visibility")">@I18n["client"]</button>
+                                    }
+                                    else
+                                    {
+                                        <div class="lib-card @(currentLibId==lib.Id?"on":"")" @onclick="()=>SelectLibrary(lib.Id)">
+                                            <div class="lib-card-head">
+                                                <span class="lib-name" title="@lib.Name">@lib.Name</span>
+                                                <span class="lib-actions">
+                                                    <button @onclick:stopPropagation="true" @onclick="()=>EditLibrary(lib)" title="@I18n["edit"]">✎</button>
+                                                    <button class="danger" @onclick:stopPropagation="true" @onclick="()=>RemoveLibrary(lib)" title="@I18n["delete"]">×</button>
+                                                </span>
+                                            </div>
+                                            <div class="lib-count"><b>@lib.LinkCount</b>@(I18n.Lang=="zh"?" 条链接":" links")</div>
+                                            <div class="lib-channels">
+                                                <button type="button" class="ch-pill @(lib.VisibleOnWeb?"on":"off")" @onclick:stopPropagation="true"
+                                                        @onclick="()=>ToggleChannel(lib, true)"
+                                                        title="@(I18n.Lang=="zh"?"点击切换是否在网页端显示":"Toggle web visibility")">@I18n["web"]</button>
+                                                <button type="button" class="ch-pill @(lib.VisibleOnClient?"on":"off")" @onclick:stopPropagation="true"
+                                                        @onclick="()=>ToggleChannel(lib, false)"
+                                                        title="@(I18n.Lang=="zh"?"点击切换是否在客户端显示":"Toggle client visibility")">@I18n["client"]</button>
+                                            </div>
                                         </div>
-                                    </div>
+                                    }
                                 }
                                 <button class="lib-new" @onclick="StartNewLibrary">
                                     <span class="plus">+</span>
@@ -236,7 +264,8 @@ else
                             @if (!string.IsNullOrEmpty(publishMsg)) { <p class="msg">@publishMsg</p> }
                         </div>
 
-                        @if (libFormOpen)
+                        @* 新建发布库：没有"原位置"可言，仍显示在列表下方 *@
+                        @if (libFormOpen && !libEditing)
                         {
                             <div class="lib-form">
                                 <label>@I18n["libraryName"]</label>
@@ -361,8 +390,8 @@ else
                         </div>
 
                         <div class="toolbar">
-                            <input placeholder="@(I18n.Lang=="zh"?"搜索名称/链接…":"Search title/url…")" @bind="q" @bind:event="oninput" @bind:after="LoadLinks" />
-                            <select @bind="srcFilter" @bind:after="LoadLinks">
+                            <input placeholder="@(I18n.Lang=="zh"?"搜索名称/链接…":"Search title/url…")" @bind="q" @bind:event="oninput" @bind:after="ReloadFromFirstPage" />
+                            <select @bind="srcFilter" @bind:after="ReloadFromFirstPage">
                                 <option value="">@I18n["allSources"]</option>
                                 <option value="0">@I18n["manual"]</option>
                                 <option value="1">@I18n["aiImported"]</option>
@@ -410,9 +439,10 @@ else
                             }
                         </div>
 
-                        @if (libraries.Count > 1)
-                        {
-                            <div class="toolbar move-bar">
+                        @* 移动/复制栏（每页条数固定靠右显示，单库时也保留） *@
+                        <div class="toolbar move-bar">
+                            @if (libraries.Count > 1)
+                            {
                                 <span class="sel-count">@I18n["moveTo"]</span>
                                 <select @bind="targetLibId">
                                     <option value="0">@(I18n.Lang=="zh"?"选择目标发布库…":"Select target library…")</option>
@@ -424,8 +454,18 @@ else
                                 <button @onclick="MoveSelected" disabled="@(selected.Count==0 || targetLibId==0)">@I18n["move"]</button>
                                 <button @onclick="CopySelected" disabled="@(selected.Count==0 || targetLibId==0)">@I18n["copyLinks"]</button>
                                 @if (transferMsg != null) { <span class="msg @(transferErr?"err":"")" style="margin:0">@transferMsg</span> }
-                            </div>
-                        }
+                            }
+                            <label class="page-size">
+                                <span>@(I18n.Lang=="zh"?"每页":"Per page")</span>
+                                <select @bind="pageSize" @bind:after="OnPageSizeChanged" title="@(I18n.Lang=="zh"?"当前页显示条数":"Rows per page")">
+                                    @foreach (var n in PageSizeOptions)
+                                    {
+                                        <option value="@n">@n</option>
+                                    }
+                                </select>
+                                <span>@(I18n.Lang=="zh"?"条":"rows")</span>
+                            </label>
+                        </div>
                         <table class="grid links-grid">
                             <colgroup>
                                 <col style="width:34px" />
@@ -463,7 +503,25 @@ else
                                 }
                             </tbody>
                         </table>
-                        <p class="total-line">@(I18n.Lang=="zh"?"共":"Total") @total</p>
+                        <div class="pager">
+                            <span class="total-line" style="margin:0">
+                                @(I18n.Lang=="zh"?"共":"Total") @total @(I18n.Lang=="zh"?"条":"items")
+                                · @(I18n.Lang=="zh"?"第":"Page") @(page) / @(pageCount) @(I18n.Lang=="zh"?"页":"")
+                                · @(I18n.Lang=="zh"?"每页":"Per page") @pageSize @(I18n.Lang=="zh"?"条":"rows")
+                            </span>
+                            <span class="pager-btns">
+                                <button @onclick="()=>GoPage(1)" disabled="@(page == 1)" title="@(I18n.Lang=="zh"?"首页":"First")">«</button>
+                                <button @onclick="()=>GoPage(page-1)" disabled="@(page == 1)">@(I18n.Lang=="zh"?"上一页":"Prev")</button>
+                                <select @bind="page" @bind:after="OnPageJump">
+                                    @for (var p = 1; p <= pageCount; p++)
+                                    {
+                                        <option value="@p">@p</option>
+                                    }
+                                </select>
+                                <button @onclick="()=>GoPage(page+1)" disabled="@(page>=pageCount)">@(I18n.Lang=="zh"?"下一页":"Next")</button>
+                                <button @onclick="()=>GoPage(pageCount)" disabled="@(page>=pageCount)" title="@(I18n.Lang=="zh"?"末页":"Last")">»</button>
+                            </span>
+                        </div>
                     </div>
                     </div>
                     </div>
@@ -1078,6 +1136,9 @@ else
     private List<LinkDto> links = [];
     private HashSet<int> selected = [];
     private int total;
+    // 分页：每页条数可选，默认 20
+    private int pageSize = 20, page = 1;
+    private static readonly int[] PageSizeOptions = [20, 50, 100, 200, 500, 1000];
     private List<UserDto> users = [];
     private string newUser = "", newPwd = "";
     private string pasteText = "", parseJson = "";
@@ -1382,11 +1443,56 @@ else
     private async Task LoadStats()
     { try { stats = await Api.GetStats() ?? new(); } catch { } }
 
+    private int pageCount => pageSize <= 0 ? 1 : Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
+
+    private int loadSeq; // 搜索请求序号：快速输入时丢弃过期响应，防止旧结果覆盖新结果
+
     private async Task LoadLinks()
     {
+        var seq = ++loadSeq;
         ImportSource? src = string.IsNullOrEmpty(srcFilter) ? null : (ImportSource)int.Parse(srcFilter);
-        var r = await Api.ListLinks(new LinkQuery { Q = q, ImportSource = src, LibraryId = currentLibId, Page = 1, PageSize = 100 });
-        links = r?.Items ?? []; total = r?.Total ?? 0;
+        if (page < 1) page = 1;
+        var r = await Api.ListLinks(new LinkQuery { Q = q, ImportSource = src, LibraryId = currentLibId, Page = page, PageSize = pageSize });
+        if (seq != loadSeq) return; // 已经有更新的请求发出，这次的结果作废
+        total = r?.Total ?? 0;
+        // 删除/筛选后当前页可能越界，回退到最后一页再拉一次
+        if (total > 0 && page > pageCount)
+        {
+            page = pageCount;
+            r = await Api.ListLinks(new LinkQuery { Q = q, ImportSource = src, LibraryId = currentLibId, Page = page, PageSize = pageSize });
+            if (seq != loadSeq) return;
+            total = r?.Total ?? 0;
+        }
+        // 结果为空时页码归 1，否则底部会显示「第 5 / 1 页」这种鬼东西
+        if (total == 0) page = 1;
+        links = r?.Items ?? [];
+    }
+
+    /// <summary>筛选条件变化：回到第 1 页再加载。</summary>
+    private async Task ReloadFromFirstPage() { page = 1; await LoadLinks(); }
+
+    /// <summary>每页条数变化（双向绑定已写入 pageSize）：回到第 1 页重载。</summary>
+    private async Task OnPageSizeChanged()
+    {
+        if (pageSize <= 0 || !PageSizeOptions.Contains(pageSize)) pageSize = 20;
+        page = 1;
+        await LoadLinks();
+    }
+
+    /// <summary>直接跳页（双向绑定已写入 page）：夹到合法范围后重载。</summary>
+    private async Task OnPageJump()
+    {
+        if (page < 1) page = 1;
+        if (page > pageCount) page = pageCount;
+        await LoadLinks();
+    }
+
+    private async Task GoPage(int p)
+    {
+        var target = Math.Clamp(p, 1, pageCount);
+        if (target == page) return;
+        page = target;
+        await LoadLinks();
     }
 
     // stats 来自 JSON 反序列化，数字是 JsonElement，直接 Convert.ToInt32 会抛 InvalidCastException
@@ -1444,6 +1550,7 @@ else
         currentLibId = id;
         currentLibName = libraries.FirstOrDefault(x => x.Id == id)?.Name;
         selected.Clear();
+        page = 1;
         await LoadLinks();
     }
 
@@ -2035,7 +2142,14 @@ else
         try
         {
             var (ok, msg) = await Api.ChangePassword(oldPwd, newPwd2);
-            if (ok) { oldPwd = newPwd2 = newPwd3 = ""; pwdMsg = I18n.Lang=="zh"?"密码已修改":"Password changed"; }
+            if (ok)
+            {
+                oldPwd = newPwd2 = newPwd3 = "";
+                pwdMsg = I18n.Lang=="zh" ? "密码已修改，正在重新登录…" : "Password changed, signing out…";
+                // 后端改密会作废所有旧令牌，这里必须主动清 token 回登录页，否则下一步操作全部 401
+                await Task.Delay(700);
+                await Logout();
+            }
             else { pwdMsg = I18n.Lang=="zh" ? (msg ?? "修改失败") : "Failed"; pwdErr = true; }
         }
         finally { pwdBusy = false; }
@@ -2054,7 +2168,7 @@ else
         foreach (var l in links) { if (on) selected.Add(l.Id); else selected.Remove(l.Id); }
     }
     private async Task Hide(LinkDto l) { await Api.SetHidden(l.Id, !l.IsHidden); await LoadLinks(); await LoadStats(); }
-    private async Task Del(LinkDto l) { await Api.SoftDelete(l.Id); await LoadLinks(); await LoadStats(); }
+    private async Task Del(LinkDto l) { await Api.SoftDelete(l.Id); selected.Remove(l.Id); await LoadLinks(); await LoadStats(); }
     private async Task BatchHide(bool h) { await Api.BatchHidden([.. selected], h); selected.Clear(); await LoadLinks(); await LoadStats(); }
     private async Task BatchDel() { await Api.BatchDelete([.. selected]); selected.Clear(); await LoadLinks(); await LoadStats(); }
     private async Task Enrich(LinkDto l) { await Api.Enrich(l.Id); await LoadLinks(); }

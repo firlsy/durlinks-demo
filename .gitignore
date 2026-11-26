@@ -28,6 +28,12 @@ appsettings.Production.json
 .workbuddy/memory/
 .local-docs/
 
+# Go 服务端：本地构建与部署目录
+/run/
+/src/Durlinks.GoServer/durlinks-server.exe
+/src/Durlinks.GoServer/*.exe
+*.exe
+
 # 本地数据表（真实书签/导入导出），只保留导入模板
 *.xlsx
 !program-durlinks-demos-导入模板.xlsx

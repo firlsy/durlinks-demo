@@ -47,7 +47,7 @@ public class AdminController : ControllerBase
     {
         // 分页参数钳制：防止 Page<=0 导致负偏移异常、PageSize 过大拖垮内存
         filter.Page = Math.Max(1, filter.Page);
-        filter.PageSize = Math.Clamp(filter.PageSize, 1, 200);
+        filter.PageSize = Math.Clamp(filter.PageSize, 1, 1000);
 
         var query = _db.Links.AsQueryable(); // 管理端可见隐藏的，但不含已删除
         query = query.Where(x => !x.IsDeleted);
