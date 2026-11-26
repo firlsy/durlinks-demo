@@ -218,6 +218,9 @@ func (a *App) handleBatchDeleteCategories(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusBadRequest, "未选择有效项目")
 		return
 	}
+	if len(names) > maxBatchIDs {
+		names = names[:maxBatchIDs]
+	}
 
 	result := CategoryBatchDeleteResult{Deleted: []string{}, Skipped: []string{}}
 	if kind == "tag" {

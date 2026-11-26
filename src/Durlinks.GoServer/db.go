@@ -443,8 +443,8 @@ func (d *DB) seed(logf func(string, ...any)) error {
 	var libID int
 	if libCount == 0 {
 		if d.pg {
-			err := d.sql.QueryRow(`INSERT INTO "PublishLibraries" ("Name","Description","VisibleOnWeb","VisibleOnClient","SortOrder","IsDeleted","CreatedAt") VALUES (?,?,?,?,?,?,?) RETURNING "Id"`,
-				"默认发布库", "系统初始化创建，可在发布管理中改名", true, true, 0, false, time.Now().UTC()).Scan(&libID)
+			err := d.sql.QueryRow(d.Rebind(`INSERT INTO "PublishLibraries" ("Name","Description","VisibleOnWeb","VisibleOnClient","SortOrder","IsDeleted","CreatedAt") VALUES (?,?,?,?,?,?,?) RETURNING "Id"`),
+				"默认发布库", "系统初始化创建，可在发布管理中改名", d.BoolValue(true), d.BoolValue(true), 0, d.BoolValue(false), time.Now().UTC()).Scan(&libID)
 			if err != nil {
 				return err
 			}
@@ -491,7 +491,11 @@ func (d *DB) seed(logf func(string, ...any)) error {
 			"admin", hash, int(RoleSuperAdmin), nil, d.BoolValue(false), d.now()); err != nil {
 			return err
 		}
-		logf("默认管理员账号：admin / %s（首次登录后请立即修改）", adminPwd)
+		if os.Getenv("DURLINKS_ADMIN_PASSWORD") == "" {
+			logf("已创建默认管理员账号 admin（口令取自内置默认值，仅限本地开发）；生产环境请设置 DURLINKS_ADMIN_PASSWORD 环境变量后重建数据库")
+		} else {
+			logf("已创建管理员账号 admin（口令取自 DURLINKS_ADMIN_PASSWORD）")
+		}
 	}
 
 	// 4) LLM 配置至少一条

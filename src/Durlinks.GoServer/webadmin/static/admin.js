@@ -632,7 +632,7 @@
       var html = '扫描 ' + d.scanned + ' 条，' + d.groups + ' 组重复，可清理 ' + d.duplicates + ' 条';
       if (d.samples && d.samples.length) {
         html += '<ul>' + d.samples.slice(0, 8).map(function (s) {
-          return '<li title="' + (s.url || '') + '">' + (s.url || '') + ' <b>×' + s.count + '</b></li>';
+          return '<li title="' + esc(s.url || '') + '">' + esc(s.url || '') + ' <b>×' + s.count + '</b></li>';
         }).join('') + '</ul>';
       }
       box.innerHTML = html;

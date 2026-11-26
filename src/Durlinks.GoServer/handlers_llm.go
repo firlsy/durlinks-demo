@@ -289,11 +289,11 @@ func (a *App) handleSaveLlmConfig(w http.ResponseWriter, r *http.Request) {
 	var id int
 	if isNew {
 		if a.db.pg {
-			err := a.db.sql.QueryRow(`INSERT INTO "LlmConfigs"
+			err := a.db.sql.QueryRow(a.db.Rebind(`INSERT INTO "LlmConfigs"
 				("Name","Protocol","RetryPolicy","MaxRetries","RetryOn","ApiEndpoint","ApiKey","Model","ModelsJson","IsConfigured","IsDefault","UpdatedAt")
-				VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING "Id"`,
+				VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING "Id"`),
 				cur.Name, cur.Protocol, cur.RetryPolicy, cur.MaxRetries, cur.RetryOn, cur.ApiEndpoint, cur.ApiKey,
-				cur.Model, cur.ModelsJson, cur.IsConfigured, cur.IsDefault, now).Scan(&id)
+				cur.Model, cur.ModelsJson, a.db.BoolValue(cur.IsConfigured), a.db.BoolValue(cur.IsDefault), now).Scan(&id)
 			if err != nil {
 				writeErr(w, http.StatusInternalServerError, err.Error())
 				return
@@ -485,6 +485,7 @@ func baseEndpoint(endpoint string) string {
 
 var llmClient = &http.Client{
 	Timeout: 35 * time.Second,
+	CheckRedirect: safeLLMRedirect,
 	Transport: &http.Transport{
 		// 本地模型（Ollama/LM Studio）走回环，必须绕过系统代理
 		Proxy:               nil,
@@ -506,8 +507,8 @@ type llmProbeResult struct {
 // probeLLM 用 GET {base}/models 探测连通性并尽量列出模型。
 func (a *App) probeLLM(endpoint, apiKey, protocol string) llmProbeResult {
 	base := baseEndpoint(endpoint)
-	if base == "" {
-		return llmProbeResult{Message: "接口地址为空"}
+	if _, err := validateEndpointURL(base); err != nil {
+		return llmProbeResult{Message: err.Error()}
 	}
 	url := base + "/models"
 	req, err := http.NewRequest(http.MethodGet, url, nil)

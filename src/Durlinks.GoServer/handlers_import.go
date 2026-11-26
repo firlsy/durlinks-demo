@@ -356,8 +356,11 @@ func (a *App) handleImportTemplate(w http.ResponseWriter, r *http.Request) {
 	writeErr(w, http.StatusNotFound, "导入模板文件不存在")
 }
 
-func readUpload(r *http.Request, maxBytes int64) (multipart.File, *multipart.FileHeader, error) {
-	if err := r.ParseMultipartForm(maxBytes); err != nil {
+func readUpload(w http.ResponseWriter, r *http.Request, maxBytes int64) (multipart.File, *multipart.FileHeader, error) {
+	// ParseMultipartForm 的 maxBytes 只是"超过多少写入磁盘"的内存阈值，不是总量上限。
+	// 用 MaxBytesReader 限制整个请求体，避免超大 body 先把临时目录写满。
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	if err := r.ParseMultipartForm(4 << 20); err != nil {
 		return nil, nil, err
 	}
 	file, header, err := r.FormFile("file")
@@ -366,12 +369,15 @@ func readUpload(r *http.Request, maxBytes int64) (multipart.File, *multipart.Fil
 
 // handleImportExcel POST /api/admin/import/excel?libraryId=（≤10MB 同步导入）
 func (a *App) handleImportExcel(w http.ResponseWriter, r *http.Request) {
-	file, header, err := readUpload(r, 16<<20)
+	file, header, err := readUpload(w, r, 16<<20)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "未上传文件")
 		return
 	}
 	defer file.Close()
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
 	if header.Size > 10*1024*1024 {
 		writeErr(w, http.StatusBadRequest, "文件不能超过 10MB")
 		return
@@ -458,12 +464,15 @@ func (j *importJob) isCancelled() bool {
 
 // handleStartExcelImport POST /api/admin/import/excel/jobs
 func (a *App) handleStartExcelImport(w http.ResponseWriter, r *http.Request) {
-	file, header, err := readUpload(r, 64<<20)
+	file, header, err := readUpload(w, r, 64<<20)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "未上传文件")
 		return
 	}
 	defer file.Close()
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
 	if header.Size > 64*1024*1024 {
 		writeErr(w, http.StatusBadRequest, "文件不能超过 64MB")
 		return

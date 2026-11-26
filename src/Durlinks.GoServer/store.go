@@ -108,7 +108,7 @@ func (d *DB) buildLinkWhere(q LinkQuery, public bool) (string, []any) {
 // 每页条数上限：与前端下拉选项（20/50/100/200/500/1000）保持一致，
 // 否则用户选 500 只会拿到 200 条，UI 与实际数据不符。
 const (
-	publicMaxPageSize = 500
+	publicMaxPageSize = 1000
 	adminMaxPageSize  = 1000
 )
 
@@ -314,7 +314,7 @@ func (d *DB) ensureTag(name string) (int, error) {
 		return 0, err
 	}
 	if d.pg {
-		if err := d.sql.QueryRow(`INSERT INTO "Tags" ("Name") VALUES (?) RETURNING "Id"`, name).Scan(&id); err == nil {
+		if err := d.sql.QueryRow(d.Rebind(`INSERT INTO "Tags" ("Name") VALUES (?) RETURNING "Id"`), name).Scan(&id); err == nil {
 			return id, nil
 		}
 	} else {

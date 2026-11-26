@@ -127,8 +127,8 @@ func (a *App) handleCreateLibrary(w http.ResponseWriter, r *http.Request) {
 	created := a.db.now()
 	var id int
 	if a.db.pg {
-		err := a.db.sql.QueryRow(`INSERT INTO "PublishLibraries" ("Name","Description","VisibleOnWeb","VisibleOnClient","SortOrder","IsDeleted","CreatedAt")
-			VALUES (?,?,?,?,?,?,?) RETURNING "Id"`, name, nptr(desc), dto.VisibleOnWeb, dto.VisibleOnClient, sortOrder, false, created).Scan(&id)
+		err := a.db.sql.QueryRow(a.db.Rebind(`INSERT INTO "PublishLibraries" ("Name","Description","VisibleOnWeb","VisibleOnClient","SortOrder","IsDeleted","CreatedAt")
+			VALUES (?,?,?,?,?,?,?) RETURNING "Id"`), name, nptr(desc), a.db.BoolValue(dto.VisibleOnWeb), a.db.BoolValue(dto.VisibleOnClient), sortOrder, a.db.BoolValue(false), created).Scan(&id)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return

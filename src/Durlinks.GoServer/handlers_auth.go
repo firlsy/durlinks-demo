@@ -76,7 +76,8 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// 失败计数键：反代部署下 RemoteAddr 是同一个上游地址，等价于按账号限流
 	loginKey := clientIP(r) + "|" + strings.ToLower(strings.TrimSpace(req.Username))
-	if blocked, left := a.loginGuard.blocked(loginKey); blocked {
+	// 原子占用一次尝试配额，避免并发请求同时通过检查后再计数（TOCTOU 绕过）
+	if blocked, left := a.loginGuard.reserve(loginKey); blocked {
 		minutes := int(left.Minutes()) + 1
 		writeJSON(w, http.StatusTooManyRequests, APIError{Message: fmt.Sprintf("登录失败次数过多，请 %d 分钟后再试", minutes)})
 		return
@@ -103,7 +104,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user == nil || !VerifyPassword(req.Password, user.PasswordHash) {
-		a.loginGuard.fail(loginKey)
+		// 计数已在 reserve() 原子完成，这里不再重复 fail
 		writeErr(w, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
@@ -118,7 +119,6 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 			totp = *req.TotpCode
 		}
 		if totp == "" || !VerifyTotp(secret, totp) {
-			a.loginGuard.fail(loginKey)
 			writeJSON(w, http.StatusUnauthorized, map[string]any{"message": "MFA 动态码错误", "mfaRequired": true})
 			return
 		}
@@ -189,7 +189,8 @@ func (a *App) handleMfaDisable(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "动态码或密码错误")
 		return
 	}
-	_, err = a.db.sql.Exec(a.db.Rebind(`UPDATE "Users" SET "MfaEnabled" = ?, "MfaSecret" = NULL WHERE "Id" = ?`), a.db.BoolValue(false), user.ID)
+	// MFA 状态变更后 TokenVersion+1：开启前签发的旧 token 立即失效，避免 MFA 形同虚设
+	_, err = a.db.sql.Exec(a.db.Rebind(`UPDATE "Users" SET "MfaEnabled" = ?, "MfaSecret" = NULL, "TokenVersion" = "TokenVersion" + 1 WHERE "Id" = ?`), a.db.BoolValue(false), user.ID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -279,7 +280,8 @@ func (a *App) handleMfaVerify(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "动态码错误")
 		return
 	}
-	if _, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Users" SET "MfaEnabled" = ? WHERE "Id" = ?`), a.db.BoolValue(true), user.ID); err != nil {
+	// MFA 开启后 TokenVersion+1：开启前签发的旧 token 立即失效
+	if _, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Users" SET "MfaEnabled" = ?, "TokenVersion" = "TokenVersion" + 1 WHERE "Id" = ?`), a.db.BoolValue(true), user.ID); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -332,8 +334,8 @@ func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	now := a.db.now()
 	var id int
 	if a.db.pg {
-		err := a.db.sql.QueryRow(`INSERT INTO "Users" ("Username","PasswordHash","Role","MfaSecret","MfaEnabled","CreatedAt") VALUES (?,?,?,?,?,?) RETURNING "Id"`,
-			strings.TrimSpace(req.Username), HashPassword(req.Password), int(RoleAdmin), nil, false, now).Scan(&id)
+		err := a.db.sql.QueryRow(a.db.Rebind(`INSERT INTO "Users" ("Username","PasswordHash","Role","MfaSecret","MfaEnabled","CreatedAt") VALUES (?,?,?,?,?,?) RETURNING "Id"`),
+			strings.TrimSpace(req.Username), HashPassword(req.Password), int(RoleAdmin), nil, a.db.BoolValue(false), now).Scan(&id)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return

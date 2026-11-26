@@ -15,7 +15,8 @@ func (a *App) handlePublicLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := max(1, q.Page)
-	size := clamp(q.PageSize, 1, 500)
+	// 与 queryLinks 的 publicMaxPageSize 保持一致，否则上报的每页条数与实际返回不符。
+	size := clamp(q.PageSize, 1, publicMaxPageSize)
 	totalPages := 0
 	if size > 0 {
 		totalPages = (total + size - 1) / size

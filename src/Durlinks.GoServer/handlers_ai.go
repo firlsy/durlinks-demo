@@ -41,13 +41,39 @@ type chatResponse struct {
 	} `json:"error"`
 }
 
+// llmThrottle 全局最小请求间隔，避免批量补料以最大并发猛打 LLM API 耗尽额度。
+var llmThrottle struct {
+	mu     sync.Mutex
+	lastAt time.Time
+}
+
+func (a *App) throttleLLM() {
+	minInterval := 100 * time.Millisecond
+	if a.cfg != nil && a.cfg.BatchEnrich.MinIntervalMs > 0 {
+		minInterval = time.Duration(a.cfg.BatchEnrich.MinIntervalMs) * time.Millisecond
+	}
+	if minInterval <= 0 {
+		return
+	}
+	llmThrottle.mu.Lock()
+	if wait := minInterval - time.Since(llmThrottle.lastAt); wait > 0 {
+		time.Sleep(wait)
+	}
+	llmThrottle.lastAt = time.Now()
+	llmThrottle.mu.Unlock()
+}
+
 // callChat 发一次 chat 请求，返回模型输出的原文。
 func (a *App) callChat(cfg *LlmConfig, systemPrompt, userPrompt string, maxTokens int) (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("未配置 LLM")
 	}
+	a.throttleLLM()
 	if !cfg.IsConfigured || strings.TrimSpace(cfg.ApiEndpoint) == "" || strings.TrimSpace(cfg.Model) == "" {
 		return "", fmt.Errorf("LLM 尚未配置完成（需要接口地址、密钥与模型）")
+	}
+	if _, err := validateEndpointURL(cfg.ApiEndpoint); err != nil {
+		return "", fmt.Errorf("LLM 接口地址被拒绝：%v", err)
 	}
 	if maxTokens <= 0 {
 		maxTokens = 800

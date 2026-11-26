@@ -75,6 +75,21 @@ func (a *App) serveStatic(w http.ResponseWriter, r *http.Request, root string, i
 				}
 			}
 		}
+		// 防符号链接逃逸：解析真实路径后再次确认仍在 root 内
+		if absRoot, err1 := filepath.Abs(root); err1 == nil {
+			if realRoot, err := filepath.EvalSymlinks(absRoot); err == nil {
+				if realCand, err := filepath.EvalSymlinks(candidate); err == nil {
+					relPath, err := filepath.Rel(realRoot, realCand)
+					if err != nil || filepath.IsAbs(relPath) || relPath == ".." ||
+						strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+						return false
+					}
+				} else if !os.IsNotExist(err) {
+					// 符号链接损坏或指向不可达路径，一律拒绝
+					return false
+				}
+			}
+		}
 		if fileExists(candidate) {
 			w.Header().Set("Content-Type", contentTypeFor(candidate))
 			w.Header().Set("Vary", "Accept-Encoding")

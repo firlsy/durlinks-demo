@@ -49,6 +49,31 @@ func (l *loginLimiter) blocked(key string) (bool, time.Duration) {
 	return false, 0
 }
 
+// reserve 在开始校验前原子地占用一次尝试配额：返回是否已被锁定。
+// 这样并发请求不会在 fail() 之前同时通过 blocked() 检查（TOCTOU）。
+// 注意：占用后即便登录成功也调用 success() 清除计数；失败时无需再次 fail()。
+func (l *loginLimiter) reserve(key string) (bool, time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	l.gcLocked(now)
+	a, ok := l.data[key]
+	if ok && a.lockedTo.After(now) {
+		return true, time.Until(a.lockedTo)
+	}
+	if !ok || now.Sub(a.firstAt) > loginWindowSize {
+		a = &loginAttempt{count: 1, firstAt: now}
+		l.data[key] = a
+		return false, 0
+	}
+	a.count++
+	if a.count >= loginMaxFails {
+		a.lockedTo = now.Add(loginLockFor)
+	}
+	return false, 0
+}
+
+// fail 保留给 reserve 之外的兼容调用；正常登录流程用 reserve 替代。
 func (l *loginLimiter) fail(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

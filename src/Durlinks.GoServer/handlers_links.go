@@ -68,7 +68,7 @@ func (a *App) handleSetHidden(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	res, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Links" SET "IsHidden" = ? WHERE "Id" = ?`), a.db.BoolValue(dto.Hidden), id)
+	res, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Links" SET "IsHidden" = ? WHERE "Id" = ? AND "IsDeleted" = `+a.db.False()), a.db.BoolValue(dto.Hidden), id)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -87,7 +87,7 @@ func (a *App) handleSoftDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "链接不存在")
 		return
 	}
-	res, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Links" SET "IsDeleted" = ? WHERE "Id" = ?`), a.db.BoolValue(true), id)
+	res, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Links" SET "IsDeleted" = ? WHERE "Id" = ? AND "IsDeleted" = `+a.db.False()), a.db.BoolValue(true), id)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -105,7 +105,7 @@ func (a *App) handleBatchHidden(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	affected, err := a.execOnIDs(dto.IDs, `UPDATE "Links" SET "IsHidden" = ? WHERE "Id" IN (%s)`, a.db.BoolValue(dto.Hidden))
+	affected, err := a.execOnIDs(dto.IDs, `UPDATE "Links" SET "IsHidden" = ? WHERE "IsDeleted" = `+a.db.False()+` AND "Id" IN (%s)`, a.db.BoolValue(dto.Hidden))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -119,7 +119,7 @@ func (a *App) handleBatchDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	affected, err := a.execOnIDs(dto.IDs, `UPDATE "Links" SET "IsDeleted" = ? WHERE "Id" IN (%s)`, a.db.BoolValue(true))
+	affected, err := a.execOnIDs(dto.IDs, `UPDATE "Links" SET "IsDeleted" = ? WHERE "IsDeleted" = `+a.db.False()+` AND "Id" IN (%s)`, a.db.BoolValue(true))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -127,9 +127,16 @@ func (a *App) handleBatchDelete(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, map[string]any{"affected": affected, "deleted": true})
 }
 
+// maxBatchIDs 单次批量操作的 ID 上限，防止生成超长 IN 子句导致数据库报错或内存问题。
+const maxBatchIDs = 1000
+
 func (a *App) execOnIDs(ids []int, sqlFmt string, head ...any) (int, error) {
 	if len(ids) == 0 {
 		return 0, nil
+	}
+	// SQLite 变量上限通常为 999，PostgreSQL 为 65535；统一截断到安全范围。
+	if len(ids) > maxBatchIDs {
+		ids = ids[:maxBatchIDs]
 	}
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 	args := append([]any{}, head...)
@@ -234,11 +241,11 @@ func (a *App) insertLink(tx *sql.Tx, l *Link) (int, error) {
 	}
 	if a.db.pg {
 		var id int
-		err := tx.QueryRow(`INSERT INTO "Links"
+		err := tx.QueryRow(a.db.Rebind(`INSERT INTO "Links"
 			("SortOrder","LinkType","GroupName","Title","Url","ExtractCode","ExpireAt","Platform","Version","Remark","Summary","CreatedAt","ImportSource","IsHidden","IsDeleted","LibraryId")
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING "Id"`,
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING "Id"`),
 			l.SortOrder, l.LinkType, l.GroupName, l.Title, l.URL, nptr(l.ExtractCode), nptr(l.ExpireAt), nptr(l.Platform),
-			nptr(l.Version), nptr(l.Remark), nptr(l.Summary), created, int(l.ImportSource), l.IsHidden, l.IsDeleted, l.LibraryID).Scan(&id)
+			nptr(l.Version), nptr(l.Remark), nptr(l.Summary), created, int(l.ImportSource), a.db.BoolValue(l.IsHidden), a.db.BoolValue(l.IsDeleted), l.LibraryID).Scan(&id)
 		return id, err
 	}
 	res, err := tx.Exec(a.db.Rebind(`INSERT INTO "Links"
@@ -730,7 +737,12 @@ func (a *App) handleDedupe(w http.ResponseWriter, r *http.Request) {
 	all := req.Scope == "all"
 	cond := `"IsDeleted" = ` + a.db.False()
 	args := []any{}
-	if !all && req.LibraryID != nil && *req.LibraryID > 0 {
+	if !all {
+		// 当前库去重必须指定库；否则无库过滤会跨库合并同 URL 并误删其它库的链接。
+		if req.LibraryID == nil || *req.LibraryID <= 0 {
+			writeErr(w, http.StatusBadRequest, "请指定要去的发布库")
+			return
+		}
 		cond += ` AND "LibraryId" = ?`
 		args = append(args, *req.LibraryID)
 	}
@@ -820,7 +832,7 @@ func (a *App) handleDedupe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(toRemove) > 0 {
-		removed, err := a.execOnIDs(toRemove, `UPDATE "Links" SET "IsDeleted" = ? WHERE "Id" IN (%s)`, a.db.BoolValue(true))
+		removed, err := a.execOnIDs(toRemove, `UPDATE "Links" SET "IsDeleted" = ? WHERE "IsDeleted" = `+a.db.False()+` AND "Id" IN (%s)`, a.db.BoolValue(true))
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
@@ -927,9 +939,9 @@ func sanitizeLinkURL(raw string) (string, error) {
 	if u == "" {
 		return "", nil
 	}
-	// 去掉协议前可能存在的空白/控制字符，防止 "java\tscript:" 之类的变形
+	// 去掉协议前可能存在的所有空白/控制字符（C0/C1），防止 "\x01javascript:"、"java\tscript:" 之类变形绕过协议检测
 	probe := strings.Map(func(r rune) rune {
-		if r == '\t' || r == '\n' || r == '\r' || r == ' ' || r == 0 {
+		if r == ' ' || r < 0x20 || (r >= 0x7f && r <= 0x9f) {
 			return -1
 		}
 		return r
