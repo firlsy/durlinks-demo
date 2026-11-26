@@ -1,0 +1,26 @@
+[Unit]
+Description=Durlinks Demo (public :8789 / admin :8788)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 按实际部署目录修改
+WorkingDirectory=/opt/durlinks-demo/app
+ExecStart=/opt/durlinks-demo/app/Durlinks.Server
+Environment=ASPNETCORE_ENVIRONMENT=Production
+# 可选：覆盖首次初始化的管理员口令（不设则为 admin123）
+# Environment=DURLINKS_ADMIN_PASSWORD=change-me-now
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+# 让服务跑在普通用户下（先 useradd -r -s /sbin/nologin durlinks）
+User=durlinks
+Group=durlinks
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/durlinks-demo/data
+
+[Install]
+WantedBy=multi-user.target

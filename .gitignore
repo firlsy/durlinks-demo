@@ -1,0 +1,41 @@
+~$*.xlsx
+*.tmp
+.DS_Store
+
+# .NET 构建产物
+bin/
+obj/
+release/
+/dist/
+*.user
+
+# 本地数据库（部署时生成）
+data/*.db
+data/*.db-shm
+data/*.db-wal
+deploy/data/
+
+# 机密配置：账号密码集中文件，禁止提交
+secrets.env
+*.secrets
+.env
+.env.*
+!.env.example
+!deploy/.env.example
+appsettings.Production.json
+
+# 本地工作记忆与内部资料（含部署细节/口令，禁止入库）
+.workbuddy/memory/
+.local-docs/
+
+# 本地数据表（真实书签/导入导出），只保留导入模板
+*.xlsx
+!program-durlinks-demos-导入模板.xlsx
+!src/Durlinks.Server/templates/导入模板.xlsx
+!src/Durlinks.Server/program-durlinks-demos-优化版.xlsx
+
+# 本地联调临时目录（mock LLM / playwright / 测试库 / 发布产物）
+.tmp-test/
+.tmp-scan/
+.tmp-win-publish/
+node_modules/

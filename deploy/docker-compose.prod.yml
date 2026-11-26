@@ -1,0 +1,54 @@
+# Durlinks 生产编排（新服务器推荐）：PostgreSQL + API 单容器双端口
+# 用法：
+#   1) 把本文件放到 /opt/durlinks-demo/docker-compose.prod.yml
+#   2) 同目录建 .env：PG_PASSWORD=...（可选 API_IMAGE）
+#   3) docker compose -f docker-compose.prod.yml up -d
+# 说明：
+#   - 容器内仍用 /opt/durlinks-demo/admin|web 路径，直接复用备份里的 appsettings
+#   - 对外只绑 127.0.0.1，公网入口交给 Lucky 反代（与现网一致）
+#   - 数据库连接由环境变量覆盖 appsettings，迁移时无需改配置文件
+
+name: durlinks
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: durlinks-db
+    environment:
+      POSTGRES_DB: ${PG_DATABASE:-durlinks_demo}
+      POSTGRES_USER: ${PG_USER:-durlinks_demo}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?请在 .env 中设置 PG_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-durlinks_demo} -d ${PG_DATABASE:-durlinks_demo}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    image: ${API_IMAGE:-durlinks-demo-api:latest}
+    container_name: durlinks-demo-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Database__Provider: postgres
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=${PG_DATABASE:-durlinks_demo};Username=${PG_USER:-durlinks_demo};Password=${PG_PASSWORD}"
+      Kestrel__Host: 0.0.0.0
+    volumes:
+      - ./server/appsettings.Production.json:/app/appsettings.Production.json:ro
+      - ./server/导入模板.xlsx:/app/templates/导入模板.xlsx:ro
+      - ./admin:/opt/durlinks-demo/admin:ro
+      - ./web:/opt/durlinks-demo/web:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8789:8789"
+      - "127.0.0.1:8788:8788"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

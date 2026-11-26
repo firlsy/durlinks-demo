@@ -1,0 +1,124 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>durlinks-demo · 管理控制台</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;padding:0;height:100%;font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#1f2937}
+.login-page{display:flex;min-height:100vh}
+.brand-wall{width:50%;position:relative;overflow:hidden;color:#fff;background:linear-gradient(150deg,#2c3e50 0%,#34495e 45%,#41607a 100%);padding:40px 56px;display:flex;flex-direction:column}
+.brand-top{display:flex;align-items:center;gap:14px;z-index:2}
+.brand-logo{width:44px;height:44px;border-radius:10px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}
+.brand-name{font-size:20px;font-weight:600}.brand-name .ver{font-size:10px;font-weight:500;color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.3);border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle}
+.brand-sub{font-size:11px;letter-spacing:2px;opacity:.7;margin-top:2px}
+.brand-center{margin:auto 0;z-index:2}.brand-center h1{font-size:40px;margin:0 0 18px;font-weight:600;letter-spacing:2px}.brand-center p{font-size:16px;line-height:1.9;opacity:.8;margin:0}
+.brand-bottom{z-index:2;font-size:13px}.brand-bottom .feature{margin-bottom:12px;opacity:.9}.brand-bottom .feature span{color:#7dd3fc;margin-right:8px}.brand-bottom .copyright{margin-top:40px;font-size:11px;opacity:.5}
+.decor-circle{position:absolute;width:420px;height:420px;border-radius:50%;background:rgba(255,255,255,.05);right:-120px;bottom:-80px}
+.login-panel{width:50%;background:#fff;display:flex;align-items:center;justify-content:center;position:relative}
+.lang-switch{position:absolute;top:28px;right:36px;display:flex;gap:4px}.lang-switch button{border:1px solid #e5e7eb;background:#fff;color:#6b7280;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer}.lang-switch button.on{background:#374151;color:#fff;border-color:#374151}
+.login-card{width:360px}.login-card h2{font-size:26px;margin:0 0 6px;font-weight:600;color:#111827}.login-card .subtitle{color:#9ca3af;font-size:13px;margin:0 0 28px}
+.login-card label{display:block;font-size:12px;color:#6b7280;margin:16px 0 6px}.field{width:100%;padding:11px 13px;border:1px solid #e5e7eb;border-radius:7px;background:#f8fafc;font-size:14px;color:#1f2937;outline:none}.field:focus{border-color:#94a3b8;background:#fff}
+.captcha-row{display:flex;gap:8px}.captcha-row .field{flex:1}.captcha-img{width:120px;height:40px;border:1px solid #e5e7eb;border-radius:7px;background:#eef2ff;padding:0;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center}.captcha-img img{width:120px;height:38px;display:block}
+.login-btn{width:100%;margin-top:24px;padding:12px;border:none;border-radius:7px;background:#4a6178;color:#fff;font-size:15px;font-weight:500;cursor:pointer}.login-btn:hover{background:#3b4f63}.login-btn:disabled{opacity:.6}
+.error{color:#dc2626;font-size:12px;margin:12px 0 0;min-height:16px}
+@media(max-width:900px){.brand-wall{display:none}.login-panel{width:100%}}
+</style>
+</head>
+<body>
+<div class="login-page">
+  <div class="brand-wall">
+    <div class="brand-top"><div class="brand-logo">DL</div><div><div class="brand-name">durlinks-demo <span class="ver">v1.8.26</span></div><div class="brand-sub" data-i18n="console">管理控制台</div></div></div>
+    <div class="brand-center"><h1 data-i18n="slogan">链接，尽在掌握</h1><p data-i18n="desc">集中管理、智能标注、即时检索<br/>你的私人链接仓库</p></div>
+    <div class="brand-bottom">
+      <div class="feature"><span>◆</span> <span data-i18n="f1">双通道导入 · AI 自动识别</span></div>
+      <div class="feature"><span>◆</span> <span data-i18n="f2">多用户协作 · MFA 安全加固</span></div>
+      <div class="feature"><span>◆</span> <span data-i18n="f3">多端同步 · 网页与桌面一体</span></div>
+      <div class="copyright">© 2026 durlinks-demo. All rights reserved.</div>
+    </div>
+    <div class="decor-circle"></div>
+  </div>
+  <div class="login-panel">
+    <div class="lang-switch"><button id="btnZh" class="on">中文</button><button id="btnEn">EN</button></div>
+    <div class="login-card">
+      <h2 data-i18n="welcome">欢迎回来</h2>
+      <p class="subtitle" data-i18n="loginSub">登录管理后台以继续</p>
+      <label data-i18n="username">用户名</label>
+      <input class="field" id="user" value="admin" autocomplete="username" />
+      <label data-i18n="password">登录密码</label>
+      <input class="field" id="pwd" type="password" autocomplete="current-password" />
+      <label data-i18n="captcha">验证码</label>
+      <div class="captcha-row">
+        <input class="field" id="cap" autocomplete="off" />
+        <button type="button" class="captcha-img" onclick="refreshCap()"><img id="capImg" src="api/auth/captcha/image" alt="captcha" /></button>
+      </div>
+      <div id="mfaBox" style="display:none"><label data-i18n="totp">MFA 动态码（若已开启）</label><input class="field" id="totp" placeholder="6 digits" /></div>
+      <button class="login-btn" id="loginBtn" onclick="doLogin()" data-i18n="login">登录</button>
+      <p class="error" id="err"></p>
+    </div>
+  </div>
+</div>
+<script>
+const I18N = {
+  zh:{console:"管理控制台",slogan:"链接，尽在掌握",desc:"集中管理、智能标注、即时检索<br/>你的私人链接仓库",f1:"双通道导入 · AI 自动识别",f2:"多用户协作 · MFA 安全加固",f3:"多端同步 · 网页与桌面一体",welcome:"欢迎回来",loginSub:"登录管理后台以继续",username:"用户名",password:"登录密码",captcha:"验证码",totp:"MFA 动态码（若已开启）",login:"登录",loggingIn:"登录中…",wrongPwd:"用户名或密码错误",wrongCap:"验证码错误或已过期"},
+  en:{console:"ADMIN CONSOLE",slogan:"Links, Under Control",desc:"Centralize, tag, and search instantly<br/>Your personal link vault",f1:"Dual-channel import · AI recognition",f2:"Multi-user · MFA security",f3:"Web & desktop in sync",welcome:"Welcome Back",loginSub:"Sign in to the admin console",username:"Username",password:"Password",captcha:"Captcha",totp:"MFA code (if enabled)",login:"Sign In",loggingIn:"Signing in…",wrongPwd:"Invalid username or password",wrongCap:"Captcha is wrong or expired"}
+};
+let lang = localStorage.getItem('durlinks_lang') || 'zh';
+function applyLang(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k=el.getAttribute('data-i18n'); const v=I18N[lang][k];
+    if(k==='desc') el.innerHTML=v; else el.textContent=v;
+  });
+  document.getElementById('btnZh').classList.toggle('on',lang==='zh');
+  document.getElementById('btnEn').classList.toggle('on',lang==='en');
+}
+function setLang(l){lang=l;localStorage.setItem('durlinks_lang',l);applyLang();}
+document.getElementById('btnZh').onclick=()=>setLang('zh');
+document.getElementById('btnEn').onclick=()=>setLang('en');
+applyLang();
+
+function refreshCap(){
+  document.getElementById('capImg').src='api/auth/captcha/image?t='+Date.now();
+  document.getElementById('cap').value='';
+}
+// 查询用户名是否开启 MFA（同域自动带 Cookie）
+let lastUser='';
+async function checkMfa(){
+  const u=document.getElementById('user').value.trim();
+  if(!u){document.getElementById('mfaBox').style.display='none';return;}
+  if(u===lastUser)return; lastUser=u;
+  try{
+    const r=await fetch('api/auth/mfa/check?username='+encodeURIComponent(u));
+    const d=await r.json();
+    document.getElementById('mfaBox').style.display=d.mfaEnabled?'block':'none';
+  }catch{}
+}
+// 同时监听 change 与 input，并在页面加载后立即查一次
+document.getElementById('user').addEventListener('change',checkMfa);
+document.getElementById('user').addEventListener('input',()=>{lastUser='';checkMfa();});
+window.addEventListener('DOMContentLoaded',checkMfa);
+checkMfa();
+async function doLogin(){
+  const btn=document.getElementById('loginBtn'); btn.disabled=true; btn.textContent=I18N[lang].loggingIn;
+  document.getElementById('err').textContent='';
+  try{
+    const body={username:document.getElementById('user').value.trim(),password:document.getElementById('pwd').value,
+      captchaCode:document.getElementById('cap').value.trim()};
+    const totp=document.getElementById('totp').value.trim(); if(totp)body.totpCode=totp;
+    const r=await fetch('api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),credentials:'same-origin'});
+    const d=await r.json();
+    if(!r.ok){
+      // 服务端要求 MFA 时，确保动态码输入框可见
+      if(d.mfaRequired){document.getElementById('mfaBox').style.display='block';document.getElementById('totp').focus();}
+      document.getElementById('err').textContent=d.message==='Captcha is wrong or expired'?I18N[lang].wrongCap:(d.message==='MFA 动态码错误'?'MFA code error':I18N[lang].wrongPwd);
+      refreshCap();return;
+    }
+    localStorage.setItem('durlinks_token',d.token);localStorage.setItem('durlinks_user',d.username);localStorage.setItem('durlinks_role',d.role);
+    location.href='console/';
+  }catch(e){document.getElementById('err').textContent=e.message;refreshCap();}
+  finally{btn.disabled=false;btn.textContent=I18N[lang].login;}
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName==='INPUT')doLogin();});
+</script>
+</body>
+</html>

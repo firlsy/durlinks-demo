@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Durlinks.AdminWeb/Durlinks.AdminWeb.csproj" />
+    <Project Path="src/Durlinks.Desktop/Durlinks.Desktop.csproj" />
+    <Project Path="src/Durlinks.Server/Durlinks.Server.csproj" />
+    <Project Path="src/Durlinks.Shared/Durlinks.Shared.csproj" />
+    <Project Path="src/Durlinks.Web/Durlinks.Web.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,555 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Durlinks.Desktop.App"
+             RequestedThemeVariant="Default">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- ============ 浅色主题：品牌 / 中性 / 语义 / 徽章 / chip ============ -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <!-- 品牌主色 -->
+                    <SolidColorBrush x:Key="AppAccentBrush" Color="#4F46E5"/>
+                    <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#4338CA"/>
+                    <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#3730A3"/>
+                    <SolidColorBrush x:Key="AppAccentSoftBrush" Color="#EEF2FF"/>
+                    <SolidColorBrush x:Key="AppAccentMutedBrush" Color="#C7D2FE"/>
+                    <SolidColorBrush x:Key="AppAccentTextBrush" Color="#4338CA"/>
+                    <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF"/>
+
+                    <!-- 中性色 -->
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F7F8FA"/>
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="SurfaceSunkenBrush" Color="#F1F3F6"/>
+                    <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#F4F5F8"/>
+                    <!-- 表格表头 / 侧栏选中带（对应文件管理器式列表） -->
+                    <SolidColorBrush x:Key="TableHeaderBgBrush" Color="#F5F6F8"/>
+                    <SolidColorBrush x:Key="RailItemActiveBgBrush" Color="#DAE1FC"/>
+                    <SolidColorBrush x:Key="BorderSubtleBrush" Color="#E8EAF0"/>
+                    <SolidColorBrush x:Key="BorderDefaultBrush" Color="#DDE1E9"/>
+                    <SolidColorBrush x:Key="BorderStrongBrush" Color="#C9CFDA"/>
+                    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1B1F2A"/>
+                    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#5B6472"/>
+                    <SolidColorBrush x:Key="TextTertiaryBrush" Color="#7C8696"/>
+                    <SolidColorBrush x:Key="TextDisabledBrush" Color="#B4BBC7"/>
+
+                    <!-- 语义色 -->
+                    <SolidColorBrush x:Key="SuccessBgBrush" Color="#E7F6EC"/>
+                    <SolidColorBrush x:Key="SuccessBaseBrush" Color="#16A34A"/>
+                    <SolidColorBrush x:Key="SuccessTextBrush" Color="#15803D"/>
+                    <SolidColorBrush x:Key="WarningBgBrush" Color="#FEF3E2"/>
+                    <SolidColorBrush x:Key="WarningBaseBrush" Color="#D97706"/>
+                    <SolidColorBrush x:Key="WarningTextBrush" Color="#B45309"/>
+                    <SolidColorBrush x:Key="ErrorBgBrush" Color="#FDECEC"/>
+                    <SolidColorBrush x:Key="ErrorBaseBrush" Color="#DC2626"/>
+                    <SolidColorBrush x:Key="ErrorTextBrush" Color="#B91C1C"/>
+                    <SolidColorBrush x:Key="InfoBgBrush" Color="#E8F1FD"/>
+                    <SolidColorBrush x:Key="InfoBaseBrush" Color="#2563EB"/>
+                    <SolidColorBrush x:Key="InfoTextBrush" Color="#1D4ED8"/>
+
+                    <!-- 来源徽章 -->
+                    <SolidColorBrush x:Key="SourceAiBgBrush" Color="#F3EEFF"/>
+                    <SolidColorBrush x:Key="SourceAiFgBrush" Color="#6D3FD4"/>
+                    <SolidColorBrush x:Key="SourceAiDotBrush" Color="#8B5CF6"/>
+                    <SolidColorBrush x:Key="SourceManualBgBrush" Color="#EEF2F6"/>
+                    <SolidColorBrush x:Key="SourceManualFgBrush" Color="#4B5A6B"/>
+                    <SolidColorBrush x:Key="SourceManualDotBrush" Color="#7C8A9A"/>
+
+                    <!-- chip -->
+                    <SolidColorBrush x:Key="ChipBgBrush" Color="#F1F3F6"/>
+                    <SolidColorBrush x:Key="ChipFgBrush" Color="#5B6472"/>
+                    <SolidColorBrush x:Key="ChipBorderBrush" Color="#E8EAF0"/>
+                    <SolidColorBrush x:Key="ChipActiveBgBrush" Color="#EEF2FF"/>
+                    <SolidColorBrush x:Key="ChipActiveFgBrush" Color="#4338CA"/>
+
+                    <!-- 遮罩 -->
+                    <SolidColorBrush x:Key="ScrimBrush" Color="#33000000"/>
+                </ResourceDictionary>
+
+                <!-- ============ 深色主题：同名键覆盖 ============ -->
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppAccentBrush" Color="#7C83F0"/>
+                    <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#9298F5"/>
+                    <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#6B72DE"/>
+                    <SolidColorBrush x:Key="AppAccentSoftBrush" Color="#1E2340"/>
+                    <SolidColorBrush x:Key="AppAccentMutedBrush" Color="#2E3566"/>
+                    <SolidColorBrush x:Key="AppAccentTextBrush" Color="#A5ACFF"/>
+                    <SolidColorBrush x:Key="OnAccentBrush" Color="#0F1117"/>
+
+                    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0F1117"/>
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#171A23"/>
+                    <SolidColorBrush x:Key="SurfaceSunkenBrush" Color="#11141C"/>
+                    <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#1D212C"/>
+                    <SolidColorBrush x:Key="TableHeaderBgBrush" Color="#141821"/>
+                    <SolidColorBrush x:Key="RailItemActiveBgBrush" Color="#262C4E"/>
+                    <SolidColorBrush x:Key="BorderSubtleBrush" Color="#262B38"/>
+                    <SolidColorBrush x:Key="BorderDefaultBrush" Color="#333A4A"/>
+                    <SolidColorBrush x:Key="BorderStrongBrush" Color="#454E62"/>
+                    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E6E9F0"/>
+                    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#9BA4B5"/>
+                    <SolidColorBrush x:Key="TextTertiaryBrush" Color="#6E7889"/>
+                    <SolidColorBrush x:Key="TextDisabledBrush" Color="#4B5566"/>
+
+                    <SolidColorBrush x:Key="SuccessBgBrush" Color="#12291F"/>
+                    <SolidColorBrush x:Key="SuccessBaseBrush" Color="#34D399"/>
+                    <SolidColorBrush x:Key="SuccessTextBrush" Color="#6EE7B7"/>
+                    <SolidColorBrush x:Key="WarningBgBrush" Color="#2A2013"/>
+                    <SolidColorBrush x:Key="WarningBaseBrush" Color="#FBBF24"/>
+                    <SolidColorBrush x:Key="WarningTextBrush" Color="#FCD34D"/>
+                    <SolidColorBrush x:Key="ErrorBgBrush" Color="#2E1618"/>
+                    <SolidColorBrush x:Key="ErrorBaseBrush" Color="#F87171"/>
+                    <SolidColorBrush x:Key="ErrorTextBrush" Color="#FCA5A5"/>
+                    <SolidColorBrush x:Key="InfoBgBrush" Color="#14233A"/>
+                    <SolidColorBrush x:Key="InfoBaseBrush" Color="#60A5FA"/>
+                    <SolidColorBrush x:Key="InfoTextBrush" Color="#93C5FD"/>
+
+                    <SolidColorBrush x:Key="SourceAiBgBrush" Color="#241B3A"/>
+                    <SolidColorBrush x:Key="SourceAiFgBrush" Color="#B79CFF"/>
+                    <SolidColorBrush x:Key="SourceAiDotBrush" Color="#A78BFA"/>
+                    <SolidColorBrush x:Key="SourceManualBgBrush" Color="#202632"/>
+                    <SolidColorBrush x:Key="SourceManualFgBrush" Color="#9BA4B5"/>
+                    <SolidColorBrush x:Key="SourceManualDotBrush" Color="#7C8A9A"/>
+
+                    <SolidColorBrush x:Key="ChipBgBrush" Color="#202632"/>
+                    <SolidColorBrush x:Key="ChipFgBrush" Color="#9BA4B5"/>
+                    <SolidColorBrush x:Key="ChipBorderBrush" Color="#333A4A"/>
+                    <SolidColorBrush x:Key="ChipActiveBgBrush" Color="#1E2340"/>
+                    <SolidColorBrush x:Key="ChipActiveFgBrush" Color="#A5ACFF"/>
+
+                    <SolidColorBrush x:Key="ScrimBrush" Color="#99000000"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- ============ 字体 ============ -->
+            <FontFamily x:Key="SansFontFamily">Inter, PingFang SC, Microsoft YaHei UI, Noto Sans SC, system-ui</FontFamily>
+            <FontFamily x:Key="MonoFontFamily">JetBrains Mono, SF Mono, Consolas, monospace</FontFamily>
+
+            <!-- ============ 字号 ============ -->
+            <x:Double x:Key="BrandFontSize">18</x:Double>
+            <x:Double x:Key="TitleH1FontSize">18</x:Double>
+            <x:Double x:Key="SectionTitleFontSize">14</x:Double>
+            <x:Double x:Key="CardTitleFontSize">15</x:Double>
+            <x:Double x:Key="BodyFontSize">13</x:Double>
+            <x:Double x:Key="BodyStrongFontSize">13</x:Double>
+            <x:Double x:Key="AuxFontSize">12</x:Double>
+            <x:Double x:Key="CaptionFontSize">11</x:Double>
+            <x:Double x:Key="MonoFontSize">12</x:Double>
+
+            <!-- ============ 字重 ============ -->
+            <FontWeight x:Key="WeightNormal">Normal</FontWeight>
+            <FontWeight x:Key="WeightMedium">Medium</FontWeight>
+            <FontWeight x:Key="WeightSemiBold">SemiBold</FontWeight>
+
+            <!-- ============ 间距刻度 ============ -->
+            <x:Double x:Key="Space4">4</x:Double>
+            <x:Double x:Key="Space8">8</x:Double>
+            <x:Double x:Key="Space12">12</x:Double>
+            <x:Double x:Key="Space16">16</x:Double>
+            <x:Double x:Key="Space20">20</x:Double>
+            <x:Double x:Key="Space24">24</x:Double>
+            <x:Double x:Key="Space32">32</x:Double>
+            <x:Double x:Key="Space40">40</x:Double>
+            <x:Double x:Key="Space48">48</x:Double>
+
+            <!-- ============ 圆角 / 尺寸 ============ -->
+            <CornerRadius x:Key="CardRadius">12</CornerRadius>
+            <CornerRadius x:Key="ControlRadius">8</CornerRadius>
+            <CornerRadius x:Key="ChipRadius">6</CornerRadius>
+            <CornerRadius x:Key="PopoverRadius">12</CornerRadius>
+
+            <x:Double x:Key="BrandBarDesktopHeight">56</x:Double>
+            <x:Double x:Key="BrandBarCompactHeight">52</x:Double>
+            <x:Double x:Key="SearchHeightDesktop">40</x:Double>
+            <x:Double x:Key="SearchHeightTablet">44</x:Double>
+            <x:Double x:Key="SearchHeightMobile">48</x:Double>
+            <x:Double x:Key="TouchTargetSize">44</x:Double>
+            <!-- 卡片内操作按钮：桌面/平板紧凑 26，移动仍走 44 触控目标（由布局切换） -->
+            <x:Double x:Key="CardActionSize">26</x:Double>
+            <x:Double x:Key="IconSize">18</x:Double>
+            <x:Double x:Key="CardMaxWidth">880</x:Double>
+            <x:Double x:Key="SettingsPopoverWidth">360</x:Double>
+            <x:Double x:Key="SettingsDialogWidth">420</x:Double>
+            <x:Double x:Key="ToastBottomOffset">24</x:Double>
+            <!-- 发布库侧栏（rail）：宽度由 ApplyLayout 按 184/216/232 三档改写 -->
+            <x:Double x:Key="LibraryRailWidth">216</x:Double>
+            <x:Double x:Key="LibraryRailItemHeight">32</x:Double>
+            <x:Double x:Key="LibraryRailItemGap">0</x:Double>
+            <x:Double x:Key="LibraryRailBarWidth">3</x:Double>
+            <x:Double x:Key="LibraryRailBarHeight">16</x:Double>
+            <x:Double x:Key="RailAvatarSize">22</x:Double>
+
+            <!-- 工具栏（图标+文字按钮，右侧搜索）与表格视图 -->
+            <x:Double x:Key="ToolbarHeight">52</x:Double>
+            <x:Double x:Key="TableHeaderHeight">34</x:Double>
+            <x:Double x:Key="TableRowHeight">48</x:Double>
+            <!-- 表格列槽宽（含右侧间隙）：表头与数据行共用同一组槽宽，保证列严格对齐 -->
+            <x:Double x:Key="ColIndexWidth">40</x:Double>
+            <x:Double x:Key="ColMetaWidth">182</x:Double>
+            <x:Double x:Key="ColPlatformWidth">128</x:Double>
+            <x:Double x:Key="ColSourceWidth">100</x:Double>
+            <x:Double x:Key="ColDateWidth">104</x:Double>
+            <x:Double x:Key="ColActionWidth">92</x:Double>
+            <!-- 摘要最大行数：由窗口按布局切换（桌面/平板 2，移动 3） -->
+            <x:Int32 x:Key="SummaryMaxLines">2</x:Int32>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <!-- 主按钮 -->
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="{DynamicResource AppAccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="FontWeight" Value="{DynamicResource WeightMedium}"/>
+            <Setter Property="FontSize" Value="{DynamicResource BodyFontSize}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.primary:pointerover">
+            <Setter Property="Background" Value="{DynamicResource AppAccentHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.primary:pressed">
+            <Setter Property="Background" Value="{DynamicResource AppAccentPressedBrush}"/>
+        </Style>
+        <Style Selector="Button.primary:disabled">
+            <Setter Property="Opacity" Value="0.5"/>
+        </Style>
+
+        <!-- 图标按钮（触控目标不小于 44） -->
+        <Style Selector="Button.iconBtn">
+            <Setter Property="Width" Value="{DynamicResource TouchTargetSize}"/>
+            <Setter Property="Height" Value="{DynamicResource TouchTargetSize}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.iconBtn:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+
+        <!-- 卡片内紧凑操作按钮（尺寸随布局切换：桌面26 / 移动44） -->
+        <Style Selector="Button.cardAction">
+            <Setter Property="Width" Value="{DynamicResource CardActionSize}"/>
+            <Setter Property="Height" Value="{DynamicResource CardActionSize}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ChipRadius}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.cardAction:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+
+        <!-- 附属链接文字 chip：宽度随文字自适应（cardAction 是固定方形的纯图标按钮，不能复用） -->
+        <Style Selector="Button.subLink">
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ChipRadius}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.subLink:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+
+        <!-- 次级按钮 -->
+        <Style Selector="Button.ghostBtn">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontSize" Value="{DynamicResource BodyFontSize}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.ghostBtn:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+
+        <!-- 状态栏紧凑触发器：每页条数 / 翻页。全部复用已有画刷、字号与圆角 -->
+        <Style Selector="Button.pageSizeTrigger, Button.pageNavBtn, Button.pageSizeOption">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}"/>
+            <Setter Property="FontSize" Value="{DynamicResource AuxFontSize}"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.pageSizeTrigger:pointerover, Button.pageNavBtn:pointerover, Button.pageSizeOption:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.pageNavBtn:disabled">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+
+        <!-- 筛选 chip -->
+        <Style Selector="ToggleButton.chip">
+            <Setter Property="Background" Value="{DynamicResource ChipBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ChipFgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ChipBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ChipRadius}"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="FontSize" Value="{DynamicResource AuxFontSize}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <!-- 移动档触控目标：复用 TouchTargetSize，不新增字号/颜色 -->
+        <Style Selector="Window.mobile ToggleButton.chip">
+            <Setter Property="MinHeight" Value="{DynamicResource TouchTargetSize}"/>
+        </Style>
+        <Style Selector="ToggleButton.chip:checked">
+            <Setter Property="Background" Value="{DynamicResource ChipActiveBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ChipActiveFgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppAccentMutedBrush}"/>
+        </Style>
+
+        <!-- ============ 工具栏（文件管理器式：图标在左 + 文字在右） ============ -->
+        <Style Selector="Button.toolBtn">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="8,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}"/>
+            <Setter Property="FontSize" Value="{DynamicResource AuxFontSize}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.toolBtn:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+        </Style>
+        <Style Selector="Button.toolBtn:pressed">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.toolBtn:disabled">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+        <!-- 移动档只留图标，避免文字把搜索框挤没 -->
+        <Style Selector="Window.mobile TextBlock.toolLabel">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="Window.mobile Button.toolBtn">
+            <Setter Property="Padding" Value="7,0"/>
+        </Style>
+        <Style Selector="TextBlock.railSection">
+            <Setter Property="FontSize" Value="{DynamicResource CaptionFontSize}"/>
+            <Setter Property="FontWeight" Value="{DynamicResource WeightMedium}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="LetterSpacing" Value="0.6"/>
+        </Style>
+
+        <!-- ============ 表格视图（表头 / 行 / 单元格） ============ -->
+        <Style Selector="Border.tableHeader">
+            <Setter Property="Background" Value="{DynamicResource TableHeaderBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+        <Style Selector="TextBlock.th">
+            <Setter Property="FontSize" Value="{DynamicResource CaptionFontSize}"/>
+            <Setter Property="FontWeight" Value="{DynamicResource WeightMedium}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.tableRow">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+        <Style Selector="Border.tableRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+        <!-- 单元格文字：主列 13、次列 12，次级列统一 TextSecondary（不用 TextTertiary，对比度不足） -->
+        <Style Selector="TextBlock.cell">
+            <Setter Property="FontSize" Value="{DynamicResource AuxFontSize}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="MaxLines" Value="1"/>
+        </Style>
+
+        <!-- ============ 发布库 rail 条目（桌面侧栏 / 移动抽屉共用） ============
+             选中态是整行铺满的浅色带（无圆角，与文件管理器侧栏一致），
+             默认态透明；不再使用 3px 竖条，改由圆形字标承担识别。 -->
+        <Style Selector="Button.railItem">
+            <Setter Property="Height" Value="{DynamicResource LibraryRailItemHeight}"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <!-- 关掉 Fluent 默认方框焦点环，改用下面 :focus-visible 的 2px 品牌色描边 -->
+            <Setter Property="FocusAdorner" Value="{x:Null}"/>
+        </Style>
+        <!-- 底色由内层 Border 承担，按钮自身保持透明，避免双重底色 -->
+        <Style Selector="Button.railItem:pointerover">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Button.railItem:pressed">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <!-- 移动抽屉复用同一模板，仅把条目高度提升到 44 触控目标 -->
+        <Style Selector="Window.mobile Button.railItem">
+            <Setter Property="Height" Value="{DynamicResource TouchTargetSize}"/>
+        </Style>
+
+        <Style Selector="Border.railItemBg">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <!-- 未选中 hover：浅底 + 文字转主色 -->
+        <Style Selector="Border.railItemBg:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+        <Style Selector="Border.railItemBg:pointerover TextBlock.railName">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <!-- 选中态：整行浅蓝带；写在 hover 之后，选中项 hover 不换底色 -->
+        <Style Selector="Border.railItemBg.selected">
+            <Setter Property="Background" Value="{DynamicResource RailItemActiveBgBrush}"/>
+        </Style>
+
+        <!-- 圆形字标：未选中 ChipBg 底 + 次级字；选中品牌实底 + OnAccent 字 -->
+        <Style Selector="Border.railAvatar">
+            <Setter Property="Background" Value="{DynamicResource ChipBgBrush}"/>
+            <Setter Property="CornerRadius" Value="11"/>
+        </Style>
+        <Style Selector="Border.railAvatar.selected">
+            <Setter Property="Background" Value="{DynamicResource AppAccentBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.railAvatarText">
+            <Setter Property="FontSize" Value="{DynamicResource CaptionFontSize}"/>
+            <Setter Property="FontWeight" Value="{DynamicResource WeightMedium}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.railAvatarText.selected">
+            <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}"/>
+        </Style>
+
+        <Style Selector="TextBlock.railName">
+            <Setter Property="FontSize" Value="{DynamicResource BodyFontSize}"/>
+            <Setter Property="FontWeight" Value="{DynamicResource WeightNormal}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.railName.selected">
+            <Setter Property="Foreground" Value="{DynamicResource AppAccentTextBrush}"/>
+            <Setter Property="FontWeight" Value="{DynamicResource WeightMedium}"/>
+        </Style>
+
+        <Style Selector="TextBlock.railCount">
+            <Setter Property="FontSize" Value="{DynamicResource AuxFontSize}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.railCount.selected">
+            <Setter Property="Foreground" Value="{DynamicResource AppAccentTextBrush}"/>
+        </Style>
+
+        <!-- 侧栏「筛选」段的行：比库条目矮一档，右侧带生效数量徽章 -->
+        <Style Selector="Button.railFilterRow">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="14,0,10,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusAdorner" Value="{x:Null}"/>
+        </Style>
+        <Style Selector="Button.railFilterRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+        </Style>
+
+        <Style Selector="Border.railBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ChipRadius}"/>
+        </Style>
+        <Style Selector="Border.railBar.selected">
+            <Setter Property="Background" Value="{DynamicResource AppAccentBrush}"/>
+        </Style>
+
+        <!-- 焦点环：仅键盘导航（:focus-visible）可见，2px 品牌色，覆盖层绘制不影响布局 -->
+        <Style Selector="Border.railFocus">
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}"/>
+        </Style>
+        <Style Selector="Button.railItem:focus-visible Border.railFocus">
+            <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+        </Style>
+
+        <!-- 复合平台 chip 的 ToolTip：全部复用已有资源键 -->
+        <Style Selector="ToolTip">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource PopoverRadius}"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="{DynamicResource AuxFontSize}"/>
+        </Style>
+
+        <!-- 输入装饰层：焦点时仅换画刷，不改 BorderThickness，避免布局跳动 -->
+        <Style Selector="Border.searchGlow">
+            <Setter Property="BorderThickness" Value="3"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}"/>
+        </Style>
+        <Style Selector="Border.searchGlow.focused">
+            <Setter Property="BorderBrush" Value="{DynamicResource AppAccentSoftBrush}"/>
+        </Style>
+        <Style Selector="Border.searchBorder">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}"/>
+        </Style>
+        <Style Selector="Border.searchBorder.focused">
+            <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+        </Style>
+
+        <!-- 卡片轻量 hover 阴影预留：仅描边变化，避免列表整体阴影开销 -->
+        <Style Selector="Border.resultCard">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource CardRadius}"/>
+        </Style>
+        <Style Selector="Border.resultCard:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        </Style>
+
+        <!-- 骨架微光动画：1.2s 循环 -->
+        <Style Selector="Border.skeletonBlock">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource ChipRadius}"/>
+            <Style.Animations>
+                <Animation Duration="0:0:1.2" IterationCount="INFINITE" PlaybackDirection="Alternate">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.45"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </Application.Styles>
+</Application>

@@ -1,0 +1,24 @@
+# 构建上下文瘦身：镜像只需要源码与模板
+.git
+.gitignore
+.gitattributes
+.workbuddy
+.local-docs
+dist
+release
+data
+backups
+.tmp-test
+.tmp-scan
+.tmp-win-publish
+node_modules
+**/bin
+**/obj
+*.db
+*.db-shm
+*.db-wal
+*.xlsx
+!program-durlinks-demos-导入模板.xlsx
+secrets.env
+.env
+.env.*

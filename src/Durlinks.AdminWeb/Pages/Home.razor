@@ -1,0 +1,2537 @@
+﻿@page "/"
+@page "/{Section}"
+@using System.Globalization
+@using Durlinks.Shared.DTOs
+@using Durlinks.Shared.Enums
+@using Durlinks.AdminWeb.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@implements IDisposable
+@inject AdminService Api
+@inject I18nService I18n
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>durlinks-demo · @I18n["adminConsole"]</PageTitle>
+
+@if (!authChecked)
+{
+    <!-- 会话检查中：复用 index.html 的骨架样式，视觉与启动页连续，避免闪现登录表单 -->
+    <div class="boot-shell">
+        <aside class="boot-side">
+            <div class="boot-brand">
+                <div class="boot-logo">DL</div>
+                <div style="flex:1">
+                    <div class="sk sk-line" style="width:62px;background:rgba(255,255,255,.16);margin-bottom:6px"></div>
+                    <div class="sk sk-line" style="width:44px;background:rgba(255,255,255,.08);height:6px"></div>
+                </div>
+            </div>
+            <nav class="boot-nav">
+                <div class="boot-nav-item on"></div>
+                <div class="boot-nav-item"></div>
+                <div class="boot-nav-item"></div>
+                <div class="boot-nav-item"></div>
+                <div class="boot-nav-item"></div>
+                <div class="boot-nav-item"></div>
+            </nav>
+        </aside>
+        <main class="boot-main">
+            <div class="boot-top"><div class="sk sk-title"></div></div>
+            <div class="boot-body">
+                <div class="boot-cards">
+                    <div class="boot-card"></div><div class="boot-card"></div>
+                    <div class="boot-card"></div><div class="boot-card"></div>
+                </div>
+                <div class="boot-panels">
+                    <div class="boot-panel"></div><div class="boot-panel"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+}
+else if (!loggedIn)
+{
+    <!-- ========== 登录页 ========== -->
+    <div class="login-page">
+        <div class="brand-wall">
+            <div class="brand-top">
+                <div class="brand-logo">DL</div>
+                <div>
+                    <div class="brand-name">durlinks-demo <span class="ver">v1.8.26</span></div>
+                    <div class="brand-sub">@I18n["adminConsole"]</div>
+                </div>
+            </div>
+            <div class="brand-center">
+                <h1>链接，尽在掌握</h1>
+                <p>集中管理、智能标注、即时检索<br/>你的私人链接仓库</p>
+            </div>
+            <div class="brand-bottom">
+                <div class="feature"><span>◆</span> @(I18n.Lang=="zh"?"双通道导入 · AI 自动识别":"Dual-channel import · AI recognition")</div>
+                <div class="feature"><span>◆</span> @(I18n.Lang=="zh"?"多用户协作 · MFA 安全加固":"Multi-user · MFA security")</div>
+                <div class="feature"><span>◆</span> @(I18n.Lang=="zh"?"多端同步 · 网页与桌面一体":"Web & desktop in sync")</div>
+                <div class="copyright">© 2026 durlinks-demo. All rights reserved.</div>
+            </div>
+            <div class="decor-circle"></div>
+        </div>
+
+        <div class="login-panel">
+            <div class="lang-switch">
+                <button class="@(I18n.Lang=="zh"?"on":"")" @onclick="SwitchZh">中文</button>
+                <button class="@(I18n.Lang=="en"?"on":"")" @onclick="SwitchEn">EN</button>
+            </div>
+            <div class="login-card">
+                <h2>@I18n["welcome"]</h2>
+                <p class="subtitle">@I18n["loginSubtitle"]</p>
+
+                <label>@I18n["username"]</label>
+                <input class="field" @bind="user" @bind:after="CheckUserMfa" placeholder="admin" />
+
+                <label>@I18n["password"]</label>
+                <input class="field" type="password" @bind="pwd" @onkeyup="OnLoginKey" placeholder="••••••••" />
+
+                <label>@I18n["captcha"]</label>
+                <div class="captcha-row">
+                    <input class="field" @bind="captchaCode" placeholder="@I18n["captchaPlaceholder"]" />
+                    <button type="button" class="captcha-img" @onclick="RefreshCaptcha" title="@(I18n.Lang=="zh"?"点击刷新":"Click to refresh")">
+                        <img src="@captchaSrc" alt="captcha" />
+                    </button>
+                </div>
+
+                @if (mfaNeeded)
+                {
+                    <label class="optional">@I18n["totp"]</label>
+                    <input class="field" @bind="totp" placeholder="6 digits" />
+                }
+
+                <button class="login-btn" @onclick="DoLogin" disabled="@busy">
+                    @(busy ? I18n["loggingIn"] : I18n["login"])
+                </button>
+
+                @if (error != null) { <p class="error">@error</p> }
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <!-- ========== 控制台 ========== -->
+    <div class="console @(navFolded?"nav-folded":"")">
+        <aside class="sidebar">
+            <button class="side-fold" @onclick="()=>navFolded=!navFolded"
+                    title="@(navFolded?(I18n.Lang=="zh"?"展开功能菜单":"Expand menu"):(I18n.Lang=="zh"?"收起功能菜单":"Collapse menu"))">@(navFolded?"»":"«")</button>
+            <div class="side-brand">
+                <div class="side-logo">DL</div>
+                <div><div class="side-name">durlinks-demo <span class="ver">v1.8.26</span></div><div class="side-sub">@I18n["adminConsole"]</div></div>
+            </div>
+            <div class="side-label">@(I18n.Lang=="zh"?"主菜单":"MAIN MENU")</div>
+            <nav>
+                <button class="@(view=="dashboard"?"active":"")" @onclick="ViewDashboard"><span class="ico">▦</span>@I18n["dashboard"]</button>
+                <button class="@(view=="publish"?"active":"")" @onclick="ViewPublish"><span class="ico">🗂</span>@I18n["publish"]</button>
+                <button class="@(view=="categories"?"active":"")" @onclick="ViewCategories"><span class="ico">▤</span>@(I18n.Lang=="zh"?"分组管理":"Categories")</button>
+                <button class="@(view=="users"?"active":"")" @onclick="ViewUsers"><span class="ico">☰</span>@I18n["users"]</button>
+                <button class="@(view=="llm"?"active":"")" @onclick="ViewLlm"><span class="ico">✦</span>@I18n["llm"]</button>
+                <button class="@(view=="account"?"active":"")" @onclick="ViewAccount"><span class="ico">⚙</span>@I18n["accountSettings"]</button>
+            </nav>
+            <div class="side-spacer"></div>
+            <div class="side-bottom">
+                <div class="side-label">@(I18n.Lang=="zh"?"偏好":"PREFERENCES")</div>
+                <div class="lang-inline">
+                    <span>@I18n["language"]</span>
+                    <button class="@(I18n.Lang=="zh"?"on":"")" @onclick="SwitchZh">中文</button>
+                    <button class="@(I18n.Lang=="en"?"on":"")" @onclick="SwitchEn">EN</button>
+                </div>
+            </div>
+            <div class="side-user">
+                <div class="avatar">A</div>
+                <div><div class="u-name">@user</div><div class="u-role">@role · @I18n["superAdmin"]</div></div>
+                <button class="logout-mini" @onclick="Logout" title="@I18n["logout"]">⇥</button>
+            </div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <h1>@ViewTitle</h1>
+                <div class="top-actions">
+                    <button class="ghost" @onclick="LoadAll">⟳ @I18n["refresh"]</button>
+                    <button class="ghost" @onclick="Logout">⇥ @I18n["logout"]</button>
+                </div>
+            </header>
+
+            <div class="content">
+                @if (view == "dashboard")
+                {
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-icon blue">🔗</div><div><div class="stat-label">@I18n["totalLinks"]</div><div class="stat-value">@Num("total")</div></div></div>
+                        <div class="stat-card"><div class="stat-icon gray">◌</div><div><div class="stat-label">@I18n["hiddenLinks"]</div><div class="stat-value">@Num("hidden")</div></div></div>
+                        <div class="stat-card"><div class="stat-icon purple">✦</div><div><div class="stat-label">@I18n["aiLinks"]</div><div class="stat-value">@Num("aiCount")</div></div></div>
+                        <div class="stat-card"><div class="stat-icon orange">▦</div><div><div class="stat-label">@I18n["groups"]</div><div class="stat-value">@Num("groups")</div></div></div>
+                    </div>
+
+                    <div class="panel-row">
+                        <div class="panel">
+                            <div class="panel-title">@I18n["sourceStats"]</div>
+                            <div class="bar-chart">
+                                <div class="bar-item"><div class="bar" style="height:@(BarH("manual"))%"></div><span>@I18n["manual"]</span></div>
+                                <div class="bar-item"><div class="bar purple" style="height:@(BarH("ai"))%"></div><span>@I18n["aiImported"]</span></div>
+                                <div class="bar-item"><div class="bar teal" style="height:@(BarH("netdisk"))%"></div><span>@I18n["netdisk"]</span></div>
+                                <div class="bar-item"><div class="bar orange" style="height:@(BarH("download"))%"></div><span>@I18n["download"]</span></div>
+                            </div>
+                        </div>
+                        <div class="panel">
+                            <div class="panel-title">@I18n["quickActions"]</div>
+                            <div class="quick-actions">
+                                <button @onclick="OpenImportModal">⇩ @I18n["goImport"]</button>
+                                <button @onclick="ViewPublish">🗂 @I18n["goPublish"]</button>
+                            </div>
+                            <div class="mini-stats">
+                                <div>@I18n["tags"]<b>@Num("tags")</b></div>
+                                <div>@I18n["netdisk"]<b>@Num("netdisk")</b></div>
+                                <div>@I18n["download"]<b>@Num("download")</b></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else if (view == "publish")
+                {
+                    <div class="publish-layout @(libFolded?"lib-folded":"")">
+                    <aside class="panel lib-column @(libFolded?"folded":"")">
+                        <button class="col-fold" @onclick="()=>libFolded=!libFolded"
+                                title="@(libFolded?(I18n.Lang=="zh"?"展开发布库":"Expand libraries"):(I18n.Lang=="zh"?"收起发布库":"Collapse libraries"))">@(libFolded?"»":"«")</button>
+                        @if (!libFolded)
+                        {
+                        <div class="lib-section">
+                            <div class="lib-head">
+                                <div>
+                                    <h3>@I18n["publishLibraries"] <span class="badge manual" style="margin-left:6px">@libraries.Count</span></h3>
+                                </div>
+                            </div>
+
+                            <div class="lib-grid lib-list">
+                                @foreach (var lib in libraries)
+                                {
+                                    <div class="lib-card @(currentLibId==lib.Id?"on":"")" @onclick="()=>SelectLibrary(lib.Id)">
+                                        <div class="lib-card-head">
+                                            <span class="lib-name" title="@lib.Name">@lib.Name</span>
+                                            <span class="lib-actions">
+                                                <button @onclick:stopPropagation="true" @onclick="()=>EditLibrary(lib)" title="@I18n["edit"]">✎</button>
+                                                <button class="danger" @onclick:stopPropagation="true" @onclick="()=>RemoveLibrary(lib)" title="@I18n["delete"]">×</button>
+                                            </span>
+                                        </div>
+                                        <div class="lib-count"><b>@lib.LinkCount</b>@(I18n.Lang=="zh"?" 条链接":" links")</div>
+                                        <div class="lib-channels">
+                                            <button type="button" class="ch-pill @(lib.VisibleOnWeb?"on":"off")" @onclick:stopPropagation="true"
+                                                    @onclick="()=>ToggleChannel(lib, true)"
+                                                    title="@(I18n.Lang=="zh"?"点击切换是否在网页端显示":"Toggle web visibility")">@I18n["web"]</button>
+                                            <button type="button" class="ch-pill @(lib.VisibleOnClient?"on":"off")" @onclick:stopPropagation="true"
+                                                    @onclick="()=>ToggleChannel(lib, false)"
+                                                    title="@(I18n.Lang=="zh"?"点击切换是否在客户端显示":"Toggle client visibility")">@I18n["client"]</button>
+                                        </div>
+                                    </div>
+                                }
+                                <button class="lib-new" @onclick="StartNewLibrary">
+                                    <span class="plus">+</span>
+                                    <span>@I18n["newLibrary"]</span>
+                                </button>
+                            </div>
+                            @if (!string.IsNullOrEmpty(publishMsg)) { <p class="msg">@publishMsg</p> }
+                        </div>
+
+                        @if (libFormOpen)
+                        {
+                            <div class="lib-form">
+                                <label>@I18n["libraryName"]</label>
+                                <input @bind="libName" placeholder="@(I18n.Lang=="zh"?"例如：软件下载 / 内部工具":"e.g. Software / Internal Tools")" />
+                                <label>@I18n["description"]</label>
+                                <input @bind="libDesc" />
+                                <div class="checks">
+                                    <label><input type="checkbox" @bind="libWeb" /> @I18n["visibleOnWeb"]</label>
+                                    <label><input type="checkbox" @bind="libClient" /> @I18n["visibleOnClient"]</label>
+                                </div>
+                                <div class="btn-row">
+                                    <button class="primary" @onclick="SaveLibrary">@I18n["save"]</button>
+                                    <button @onclick="()=>libFormOpen=false">@I18n["cancel"]</button>
+                                </div>
+                                @if (libMsg != null) { <p class="msg err">@libMsg</p> }
+                            </div>
+                        }
+                        }
+                    </aside>
+
+                    @* 链接新建/编辑：改为弹出窗口 *@
+                    @if (linkFormOpen)
+                    {
+                        <div class="modal-mask">
+                            <div class="modal @(linkEditing ? "" : "wide")" @onclick:stopPropagation="true">
+                                <div class="modal-head">
+                                    <span>@(linkEditing ? (I18n.Lang=="zh"?"编辑链接":"Edit link") : (I18n.Lang=="zh"?"新建链接":"New link"))</span>
+                                    <button class="modal-x" @onclick="CloseLinkForm">×</button>
+                                </div>
+                                <div class="modal-body">
+                                    <datalist id="cat-group-list">@foreach (var item in categoryGroups) { <option value="@item"></option> }</datalist>
+                                    <datalist id="cat-platform-list">@foreach (var item in categoryPlatforms) { <option value="@item"></option> }</datalist>
+                                    <datalist id="cat-tag-list">@foreach (var item in categoryTags) { <option value="@item"></option> }</datalist>
+                                    @if (linkEditing)
+                                    {
+                                        <div class="form-2col">
+                                            <div><label>@(I18n.Lang=="zh"?"链接形式":"Type")</label><select @bind="lfLinkType"><option value="">@(I18n.Lang=="zh"?"选择形式":"Select type")</option>@foreach (var item in categoryLinkTypes) { <option value="@item">@item</option> }</select></div>
+                                            <div><label>@I18n["group"]（@(I18n.Lang=="zh"?"可多选":"multi")）</label><input @bind="lfGroup" list="cat-group-list" placeholder="@(I18n.Lang=="zh"?"多个用逗号分隔":"comma separated")" /></div>
+                                        </div>
+                                        <div class="form-2col">
+                                            <div><label>@I18n["linkTitle"]</label><input @bind="lfTitle" /></div>
+                                            <div><label>URL</label><input @bind="lfUrl" placeholder="https://" /></div>
+                                        </div>
+                                        @if (IsNetDisk(lfLinkType))
+                                        {
+                                            <div class="form-2col">
+                                                <div><label>@(I18n.Lang=="zh"?"网盘提取码":"Extract code")</label><input @bind="lfExtractCode" /></div>
+                                                <div><label>@(I18n.Lang=="zh"?"网盘过期时间":"Expire date")</label><input @bind="lfExpireAt" placeholder="2026-12-31" /></div>
+                                            </div>
+                                        }
+                                        <div class="form-2col">
+                                            <div><label>@I18n["platform"]（@(I18n.Lang=="zh"?"可多选":"multi")）</label><input @bind="lfPlatform" list="cat-platform-list" placeholder="@(I18n.Lang=="zh"?"多个用逗号分隔":"comma separated")" /></div>
+                                            <div><label>@(I18n.Lang=="zh"?"版本":"Version")</label><input @bind="lfVersion" /></div>
+                                        </div>
+                                        <label>@I18n["tags"]（@(I18n.Lang=="zh"?"逗号分隔":"comma separated")）</label>
+                                        <input @bind="lfSelectedTagsText" placeholder="@(I18n.Lang=="zh"?"多个标签用逗号分隔":"comma separated")" />
+                                        <label>@I18n["remark"]</label>
+                                        <textarea @bind="lfRemark" rows="3" placeholder="@(I18n.Lang=="zh"?"可换行":"multi-line allowed")"></textarea>
+                                    }
+                                    else
+                                    {
+                                        <div class="toolbar"><button @onclick="AddLinkDraft">+ @(I18n.Lang=="zh"?"新增一行":"Add row")</button><span class="hint">@(I18n.Lang=="zh"?"每行保存为一条链接；点击复制上一行后可逐项修改。":"Each row becomes a link. Duplicate a row then edit its values.")</span></div>
+                                        <div class="link-draft-list">
+                                            <div class="draft-row draft-head">
+                                                <span></span>
+                                                <span>@(I18n.Lang=="zh"?"链接形式":"Type")</span>
+                                                <span>@I18n["linkTitle"]</span>
+                                                <span>URL</span>
+                                                <span>@I18n["group"]</span>
+                                                <span>@I18n["platform"]</span>
+                                                <span>@(I18n.Lang=="zh"?"标签":"Tags")</span>
+                                                <span>@(I18n.Lang=="zh"?"版本":"Version")</span>
+                                                <span>@I18n["remark"]</span>
+                                                <span>@(I18n.Lang=="zh"?"操作":"Actions")</span>
+                                            </div>
+                                            @for (var i = 0; i < linkDrafts.Count; i++)
+                                            {
+                                                var index = i;
+                                                var draft = linkDrafts[index];
+                                                        <div class="link-draft">
+                                                    <div class="draft-row">
+                                                        <span class="draft-no">@(index + 1)</span>
+                                                        <select @bind="draft.LinkType" class="draft-type" title="@(I18n.Lang=="zh"?"链接形式":"Type")"><option value="">@(I18n.Lang=="zh"?"形式":"Type")</option>@foreach (var item in categoryLinkTypes) { <option value="@item">@item</option> }</select>
+                                                        <input @bind="draft.Title" placeholder="@(I18n.Lang=="zh"?"名称":"Title")" />
+                                                        <input @bind="draft.Url" placeholder="URL" />
+                                                        <input @bind="draft.GroupName" list="cat-group-list" placeholder="@(I18n.Lang=="zh"?"分组":"Group")" title="@(I18n.Lang=="zh"?"分组：可选可新建，多个用逗号分隔":"Group: select or create, comma separated")" />
+                                                        <input @bind="draft.Platform" list="cat-platform-list" placeholder="@(I18n.Lang=="zh"?"平台":"Platform")" title="@(I18n.Lang=="zh"?"平台：可选可新建，多个用逗号分隔":"Platform: select or create, comma separated")" />
+                                                        <input @bind="draft.TagsText" list="cat-tag-list" placeholder="@(I18n.Lang=="zh"?"标签":"Tags")" title="@(I18n.Lang=="zh"?"标签：可选可新建，多个用逗号分隔":"Tags: select or create, comma separated")" />
+                                                        <input @bind="draft.Version" placeholder="@(I18n.Lang=="zh"?"版本":"Version")" />
+                                                        <input @bind="draft.Remark" placeholder="@(I18n.Lang=="zh"?"备注":"Remark")" title="@(I18n.Lang=="zh"?"备注":"Remark")" />
+                                                        <span class="draft-ops"><button @onclick="()=>DuplicateLinkDraft(index)" title="@(I18n.Lang=="zh"?"复制这一行":"Duplicate row")">克隆</button><button class="danger" @onclick="()=>RemoveLinkDraft(index)" disabled="@(linkDrafts.Count == 1)" title="@I18n["delete"]">×</button></span>
+                                                    </div>
+                                                    @if (IsNetDisk(draft.LinkType))
+                                                    {
+                                                        <div class="draft-row draft-netdisk">
+                                                            <span class="draft-spacer"></span>
+                                                            <span class="draft-net-label">@(I18n.Lang=="zh"?"网盘提取码":"Extract code")</span>
+                                                            <input @bind="draft.ExtractCode" placeholder="@(I18n.Lang=="zh"?"提取码":"Code")" />
+                                                            <span class="draft-net-label">@(I18n.Lang=="zh"?"过期时间":"Expire date")</span>
+                                                            <input @bind="draft.ExpireAt" placeholder="2026-12-31" />
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    @if (linkFormMsg != null) { <p class="msg err">@linkFormMsg</p> }
+                                </div>
+                                <div class="modal-foot">
+                                    <button @onclick="CloseLinkForm">@I18n["cancel"]</button>
+                                    <button class="primary" @onclick="SaveLinkForm">@I18n["save"]</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="links-column">
+                    <div class="panel">
+                        <div class="panel-title">
+                            @(currentLibName ?? I18n["links"])
+                            <span class="badge manual" style="margin-left:8px">@total</span>
+                        </div>
+
+                        <div class="toolbar">
+                            <input placeholder="@(I18n.Lang=="zh"?"搜索名称/链接…":"Search title/url…")" @bind="q" @bind:event="oninput" @bind:after="LoadLinks" />
+                            <select @bind="srcFilter" @bind:after="LoadLinks">
+                                <option value="">@I18n["allSources"]</option>
+                                <option value="0">@I18n["manual"]</option>
+                                <option value="1">@I18n["aiImported"]</option>
+                            </select>
+                            <button class="primary" @onclick="StartNewLink">+ @I18n["newLink"]</button>
+                            <button @onclick="OpenImportModal">⇩ @I18n["import"]</button>
+                            <span class="sel-count">@(I18n.Lang=="zh"?"已选":"Selected") @selected.Count</span>
+                            <button @onclick="()=>BatchHide(true)">@(I18n.Lang=="zh"?"隐藏":"Hide")</button>
+                            <button @onclick="()=>BatchHide(false)">@(I18n.Lang=="zh"?"显示":"Show")</button>
+                            <button class="danger" @onclick="BatchDel">@(I18n.Lang=="zh"?"删除":"Delete")</button>
+                            <button @onclick="OpenDedupe" disabled="@dedupeBusy" title="@(I18n.Lang=="zh"?"清理当前库内 URL 重复的链接":"Remove duplicate URLs in current library")">@(I18n.Lang=="zh"?"去重":"Dedupe")</button>
+                            <button @onclick="ExportLinks" disabled="@exporting">@(exporting?(I18n.Lang=="zh"?"导出中…":"Exporting…"):(I18n.Lang=="zh"?"导出":"Export"))</button>
+                            @if (!string.IsNullOrEmpty(exportMsg))
+                            {
+                                <span class="msg err">@exportMsg</span>
+                            }
+                        </div>
+
+                        @* 批量 AI 补料（表格上方） *@
+                        <div class="toolbar enrich-bar">
+                            <span class="sel-count">✦ @(I18n.Lang=="zh"?"批量 AI 补料（为无摘要/标签的链接生成标签与摘要）":"Batch AI Enrich (generate tags & summaries for links lacking them)")</span>
+                            <label style="font-size:12px;color:#64748b">@(I18n.Lang=="zh"?"范围":"Scope")
+                                <select @bind="enrichMode" style="padding:3px 6px">
+                                    <option value="missing">@(I18n.Lang=="zh"?"仅未补料":"Missing only")</option>
+                                    <option value="all">@(I18n.Lang=="zh"?"全部":"All")</option>
+                                </select>
+                            </label>
+                            <label style="font-size:12px;color:#64748b">@(I18n.Lang=="zh"?"条数":"Limit")
+                                <input type="number" @bind="enrichLimit" min="1" max="100000" style="width:92px;padding:3px 6px" />
+                            </label>
+                            <button @onclick="StartBatch" disabled="@(enrichStatus?.Running==true)">@(I18n.Lang=="zh"?"开始补料":"Start")</button>
+                            @if (enrichStatus?.Running == true)
+                            {
+                                <button @onclick="CancelBatch">@(I18n.Lang=="zh"?"取消":"Cancel")</button>
+                            }
+                            @if (enrichStatus != null && (enrichStatus.Running || enrichStatus.Processed > 0 || enrichStatus.Total > 0))
+                            {
+                                <span class="enrich-progress">@enrichStatus.Processed/@enrichStatus.Total
+                                    ✓@enrichStatus.Succeeded ✗@enrichStatus.Failed ⊘@enrichStatus.Skipped
+                                    @if (!string.IsNullOrEmpty(enrichStatus.Message))
+                                    {
+                                        <span class="msg @(enrichStatus.Failed > 0 || (!enrichStatus.Running && enrichStatus.Total == 0) ? "err" : "")">@enrichStatus.Message</span>
+                                    }
+                                </span>
+                            }
+                        </div>
+
+                        @if (libraries.Count > 1)
+                        {
+                            <div class="toolbar move-bar">
+                                <span class="sel-count">@I18n["moveTo"]</span>
+                                <select @bind="targetLibId">
+                                    <option value="0">@(I18n.Lang=="zh"?"选择目标发布库…":"Select target library…")</option>
+                                    @foreach (var lib in libraries.Where(x => x.Id != currentLibId))
+                                    {
+                                        <option value="@lib.Id">@lib.Name</option>
+                                    }
+                                </select>
+                                <button @onclick="MoveSelected" disabled="@(selected.Count==0 || targetLibId==0)">@I18n["move"]</button>
+                                <button @onclick="CopySelected" disabled="@(selected.Count==0 || targetLibId==0)">@I18n["copyLinks"]</button>
+                                @if (transferMsg != null) { <span class="msg @(transferErr?"err":"")" style="margin:0">@transferMsg</span> }
+                            </div>
+                        }
+                        <table class="grid links-grid">
+                            <colgroup>
+                                <col style="width:34px" />
+                                <col style="width:16%" />
+                                <col style="width:20%" />
+                                <col style="width:17%" />
+                                <col style="width:8%" />
+                                <col style="width:8%" />
+                                <col style="width:7%" />
+                                <col style="width:7%" />
+                                <col style="width:6%" />
+                                <col style="width:134px" />
+                            </colgroup>
+                            <thead><tr><th title="@(I18n.Lang=="zh"?"全选/取消全选当前列表":"Select / deselect all in current list")"><input type="checkbox" checked="@(links.Count > 0 && links.All(l => selected.Contains(l.Id)))" @onchange="e => ToggleAllLinks(e.Value is bool b && b)" /></th><th>@(I18n.Lang=="zh"?"名称":"Title")</th><th>@(I18n.Lang=="zh"?"链接":"URL")</th><th>@(I18n.Lang=="zh"?"摘要":"Summary")</th><th>@(I18n.Lang=="zh"?"形式":"Type")</th><th>@(I18n.Lang=="zh"?"分组":"Group")</th><th>@(I18n.Lang=="zh"?"平台":"Platform")</th><th>@(I18n.Lang=="zh"?"来源":"Source")</th><th>@(I18n.Lang=="zh"?"状态":"Status")</th><th>@(I18n.Lang=="zh"?"操作":"Actions")</th></tr></thead>
+                            <tbody>
+                                @foreach (var l in links)
+                                {
+                                    <tr>
+                                        <td><input type="checkbox" checked="@selected.Contains(l.Id)" @onchange="()=>Toggle(l.Id)" /></td>
+                                        <td><a href="@l.Url" target="_blank" rel="noopener noreferrer" title="@l.Title">@l.Title</a></td>
+                                        <td><a class="url-cell" href="@l.Url" target="_blank" rel="noopener noreferrer" title="@l.Url">@l.Url</a></td>
+                                        <td><span class="summary-cell" title="@l.Summary">@l.Summary</span></td>
+                                        <td>@l.LinkType</td>
+                                        <td><span class="multi-cell" title="@l.GroupName">@l.GroupName</span></td>
+                                        <td><span class="multi-cell" title="@l.Platform">@l.Platform</span></td>
+                                        <td><span class="badge @(l.ImportSource==ImportSource.AiImported?"ai":"manual")">@(l.ImportSource==ImportSource.AiImported ? "AI" : (I18n.Lang=="zh"?"人工":"Manual"))</span></td>
+                                        <td>@(l.IsHidden ? (I18n.Lang=="zh"?"已隐藏":"Hidden") : (I18n.Lang=="zh"?"可见":"Visible"))</td>
+                                        <td class="row-actions">
+                                            <button @onclick="()=>EditLink(l)">@I18n["edit"]</button>
+                                            <button @onclick="()=>Hide(l)">@(l.IsHidden?(I18n.Lang=="zh"?"显示":"Show"):(I18n.Lang=="zh"?"隐藏":"Hide"))</button>
+                                            <button @onclick="()=>Enrich(l)">AI</button>
+                                            <button class="danger" @onclick="()=>Del(l)">×</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <p class="total-line">@(I18n.Lang=="zh"?"共":"Total") @total</p>
+                    </div>
+                    </div>
+                    </div>
+
+                    @* 导入（已并入发布库：导入到当前选中的库） *@
+                    @if (importOpen)
+                    {
+                        <div class="modal-mask">
+                            <div class="modal" @onclick:stopPropagation="true">
+                                <div class="modal-head">
+                                    <span>@(I18n.Lang=="zh"?"导入链接":"Import Links") · @(currentLibName ?? "-")</span>
+                                    <button class="modal-x" @onclick="CloseImportModal">×</button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="modal-tabs">
+                                        <button class="@(importTab=="ai"?"on":"")" @onclick="SetImportTabAi">@(I18n.Lang=="zh"?"AI 接入":"AI import")</button>
+                                        <button class="@(importTab=="excel"?"on":"")" @onclick="SetImportTabExcel">Excel @(I18n.Lang=="zh"?"导入":"import")</button>
+                                    </div>
+                                    <p class="hint">@(I18n.Lang=="zh"
+                                        ? $"导入到当前发布库「{currentLibName}」；导入完成后右侧列表会自动刷新。"
+                                        : $"Links will be imported into \"{currentLibName}\"; the list refreshes automatically.")</p>
+
+                                    @if (importTab == "ai")
+                                    {
+                                        <label>@(I18n.Lang=="zh"?"粘贴链接（每行一条，可附说明）":"Paste links (one per line, optional note)")</label>
+                                        <textarea rows="8" @bind="pasteText" placeholder="https://example.com/app.exe（每行一条，可附提取码等说明）"></textarea>
+                                        <div class="btn-row">
+                                            <button @onclick="DoParseLinks" disabled="@parseBusy">
+                                                @(parseBusy ? (I18n.Lang=="zh"?"识别中…":"Recognizing…") : (I18n.Lang=="zh"?"识别预览":"Preview"))
+                                            </button>
+                                            <button class="primary" @onclick="DoImportLinks" disabled="@importBusy">
+                                                @(importBusy ? (I18n.Lang=="zh"?"导入中…":"Importing…") : (I18n.Lang=="zh"?"确认导入":"Confirm import"))
+                                            </button>
+                                        </div>
+                                        @if (parseJson != null) { <pre class="json">@parseJson</pre> }
+                                    }
+                                    else
+                                    {
+                                        <div class="import-excel">
+                                            <button class="link-btn" @onclick="DownloadTemplate">↓ @(I18n.Lang=="zh"?"下载导入模板":"Download template")</button>
+                                            <InputFile OnChange="OnExcelFile" />
+                                            @if (excelFile != null)
+                                            {
+                                                <p class="hint">@(I18n.Lang=="zh"?"已选择：":"Selected: ")@excelFile.Name（@(Math.Round(excelFile.Size / 1024.0, 1)) KB）</p>
+                                            }
+                                            <button class="primary" @onclick="DoImportExcel" disabled="@(importBusy || importStatus?.Running==true)">
+                                                @(importBusy ? (I18n.Lang=="zh"?"上传中…":"Uploading…") : (importStatus?.Running==true ? (I18n.Lang=="zh"?"导入中…":"Importing…") : (I18n.Lang=="zh"?"上传并导入":"Upload & import")))
+                                            </button>
+                                            <p class="hint" style="margin:0">@(I18n.Lang=="zh" ? "大文件在后台导入，可关闭弹窗，进度不会丢。" : "Large files import in background; you can close this dialog.")</p>
+                                        </div>
+
+                                        @if (importStatus is { Running: true })
+                                        {
+                                            <div class="import-progress">
+                                                <div class="ip-line">
+                                                    <span class="ip-dot"></span>
+                                                    <b>@(I18n.Lang=="zh"?"导入进行中":"Importing")</b>
+                                                    <span>@(I18n.Lang=="zh"?"已扫描":"Scanned") @importStatus.Processed @(I18n.Lang=="zh"?"行":"rows") · @(I18n.Lang=="zh"?"已入库":"imported") @importStatus.Imported @(I18n.Lang=="zh"?"条":"links")</span>
+                                                </div>
+                                                <div class="ip-bar"><span></span></div>
+                                                <button @onclick="CancelExcelImport">@(I18n.Lang=="zh"?"取消导入":"Cancel")</button>
+                                            </div>
+                                        }
+                                    }
+
+                                    @if (importMsg != null)
+                                    {
+                                        <p class="msg @(importErr?"err":"")">@importMsg</p>
+                                    }
+                                </div>
+                                <div class="modal-foot">
+                                    <button @onclick="CloseImportModal">@(I18n.Lang=="zh"?"关闭":"Close")</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @* 删除发布库：密码二次确认 *@
+                    @if (libDelOpen && libDelTarget != null)
+                    {
+                        <div class="modal-mask">
+                            <div class="modal modal-sm" @onclick:stopPropagation="true">
+                                <div class="modal-head">
+                                    <span>@(I18n.Lang=="zh"?"删除发布库":"Delete library")</span>
+                                    <button class="modal-x" @onclick="CloseLibDelete">×</button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="warn-box">
+                                        @(I18n.Lang=="zh"
+                                            ? $"将删除发布库「{libDelTarget.Name}」及其下 {libDelTarget.LinkCount} 条链接（软删除，界面上不可恢复）。"
+                                            : $"Library \"{libDelTarget.Name}\" and its {libDelTarget.LinkCount} links will be removed (soft delete, not recoverable in UI).")
+                                    </div>
+                                    <label>@(I18n.Lang=="zh"?"输入当前账号密码以确认":"Enter your account password to confirm")</label>
+                                    <input type="password" @bind="libDelPwd" @onkeydown="OnLibDelKey" placeholder="••••••••" autocomplete="current-password" />
+                                    @if (libDelMsg != null) { <p class="msg err">@libDelMsg</p> }
+                                </div>
+                                <div class="modal-foot">
+                                    <button @onclick="CloseLibDelete">@I18n["cancel"]</button>
+                                    <button class="danger-solid" @onclick="ConfirmDeleteLibrary" disabled="@libDelBusy">
+                                        @(libDelBusy ? (I18n.Lang=="zh"?"删除中…":"Deleting…") : (I18n.Lang=="zh"?"确认删除":"Delete"))
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (dedupeOpen)
+                    {
+                        <div class="modal-mask">
+                            <div class="modal modal-sm" @onclick:stopPropagation="true">
+                                <div class="modal-head">
+                                    <span>@(I18n.Lang=="zh"?"链接去重":"Deduplicate links")</span>
+                                    <button class="modal-x" @onclick="CloseDedupe">×</button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="warn-box">
+                                        @(I18n.Lang=="zh"
+                                            ? "按链接地址去重（忽略大小写、首尾空格和末尾斜杠），每组保留最早导入的一条，其余软删除。"
+                                            : "Deduplicate by URL (case/space/trailing slash insensitive). Keeps the oldest in each group and soft-deletes the rest.")
+                                    </div>
+                                    <label style="display:flex;align-items:center;gap:8px">
+                                        <input type="checkbox" @bind="dedupeAll" /> @(I18n.Lang=="zh"?"跨全部发布库（默认仅当前库）":"All libraries (default: current only)")
+                                    </label>
+                                    @if (dedupeResult != null)
+                                    {
+                                        <div class="dedupe-summary">
+                                            @(I18n.Lang=="zh"
+                                                ? $"扫描 {dedupeResult.Scanned} 条，{dedupeResult.Groups} 组重复，可清理 {dedupeResult.Duplicates} 条"
+                                                : $"Scanned {dedupeResult.Scanned}, {dedupeResult.Groups} duplicate groups, {dedupeResult.Duplicates} removable")
+                                            @if (dedupeResult.Samples.Count > 0)
+                                            {
+                                                <ul>
+                                                    @foreach (var s in dedupeResult.Samples)
+                                                    {
+                                                        <li title="@s.Url">@s.Url <b>×@s.Count</b></li>
+                                                    }
+                                                </ul>
+                                            }
+                                        </div>
+                                    }
+                                    @if (dedupeMsg != null) { <p class="msg err">@dedupeMsg</p> }
+                                </div>
+                                <div class="modal-foot">
+                                    <button @onclick="CloseDedupe">@I18n["cancel"]</button>
+                                    <button @onclick="PreviewDedupe" disabled="@dedupeBusy">@(I18n.Lang=="zh"?"预览重复":"Preview")</button>
+                                    <button class="danger-solid" @onclick="ConfirmDedupe" disabled="@(dedupeBusy || dedupeResult==null || dedupeResult.Duplicates==0)">
+                                        @(dedupeBusy ? (I18n.Lang=="zh"?"处理中…":"Working…") : (I18n.Lang=="zh"?"确认去重":"Remove duplicates"))
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else if (view == "categories")
+                {
+                    var selKind = selCategoryKind;
+                    var selTitle = CategorySections.First(x => x.kind == selKind).title;
+                    var values = GetCategoryValues(selKind);
+                    var term = categorySearch.TryGetValue(selKind, out var t) ? t?.Trim() ?? "" : "";
+                    var shown = string.IsNullOrEmpty(term)
+                        ? values.Take(categoryExpanded.Contains(selKind) ? values.Count : 200).ToList()
+                        : values.Where(x => x.Contains(term, StringComparison.OrdinalIgnoreCase)).Take(500).ToList();
+                    <div class="publish-layout cat-layout @(catFolded?"lib-folded":"")">
+                        <aside class="panel lib-column @(catFolded?"folded":"")">
+                            <button class="col-fold" @onclick="()=>catFolded=!catFolded"
+                                    title="@(catFolded?(I18n.Lang=="zh"?"展开分类":"Expand categories"):(I18n.Lang=="zh"?"收起分类":"Collapse categories"))">@(catFolded?"»":"«")</button>
+                            @if (!catFolded)
+                            {
+                                <div class="lib-section">
+                                    <div class="lib-head">
+                                        <h3>@(I18n.Lang=="zh"?"分类":"Categories") <span class="badge manual" style="margin-left:6px">@CategorySections.Count()</span></h3>
+                                    </div>
+                                    <div class="lib-grid lib-list">
+                                        @foreach (var section in CategorySections)
+                                        {
+                                            var kind = section.kind;
+                                            var count = GetCategoryValues(kind).Count;
+                                            <div class="lib-card @(selKind==kind?"on":"")" @onclick="()=>SelectCategory(kind)">
+                                                <div class="lib-card-head"><span class="lib-name" title="@section.title">@section.title</span></div>
+                                                <div class="lib-count"><b>@count</b>@(I18n.Lang=="zh"?" 项":" items")</div>
+                                                <div class="lib-channels"><span class="ch-pill @(CategorySelection(kind).Count>0?"on":"")">@(I18n.Lang=="zh" ? $"已选 {CategorySelection(kind).Count}" : $"{CategorySelection(kind).Count} selected")</span></div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </aside>
+
+                        <div class="links-column">
+                            <div class="panel">
+                                <div class="panel-title">@selTitle <span class="badge manual" style="margin-left:6px">@values.Count</span></div>
+                                <p class="hint">@(I18n.Lang=="zh"?"这里维护链接录入和筛选使用的选项。重命名会同步更新已有链接；仍被链接使用的选项不能删除。":"Manage options used by link forms and filters. Renaming updates existing links; options in use cannot be deleted.")</p>
+                                <div class="toolbar">
+                                    <input @bind="categoryNewName[selKind]" placeholder="@(I18n.Lang=="zh"?"输入新名称":"New name")" />
+                                    <button class="primary" @onclick="()=>AddCategory(selKind)">+ @(I18n.Lang=="zh"?"新建":"New")</button>
+                                    <input @bind="categorySearch[selKind]" @bind:event="oninput" placeholder="@(I18n.Lang=="zh"?"搜索选项…":"Search options…")" />
+                                    @if (CategorySelectedCount > 0)
+                                    {
+                                        <span class="hint">@(I18n.Lang=="zh" ? $"已勾选 {CategorySelectedCount} 项（跨分类累计）" : $"{CategorySelectedCount} selected")</span>
+                                        <button class="danger-solid" @onclick="DeleteSelectedCategoriesConfirm">@(I18n.Lang=="zh"?"批量删除":"Delete selected")</button>
+                                        <button @onclick="ClearCategorySelection">@(I18n.Lang=="zh"?"清空选择":"Clear")</button>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(categoryMsg)) { <p class="msg @(categoryErr?"err":"")">@categoryMsg</p> }
+                                <div class="cat-table-head">
+                                    <input type="checkbox" checked="@(shown.Count > 0 && shown.All(x => IsCategorySelected(selKind, x)))" @onchange="e => ToggleVisibleCategorySelection(selKind, shown, e.Value is bool b && b)" />
+                                    <span>@(I18n.Lang=="zh"?"名称":"Name")</span>
+                                    <span>@(I18n.Lang=="zh"?"操作":"Actions")</span>
+                                </div>
+                                <div class="category-items category-table">
+                                    @foreach (var item in shown)
+                                    {
+                                        <div class="category-item @(IsCategorySelected(selKind,item) ? "selected" : "")">
+                                            <input type="checkbox" checked="@IsCategorySelected(selKind,item)" @onchange="e => ToggleCategorySelection(selKind,item, e.Value is bool b && b)" />
+                                            <span>@item</span>
+                                            <div class="row-actions">
+                                                <button @onclick="()=>RenameCategoryPrompt(selKind,item)">@(I18n.Lang=="zh"?"重命名":"Rename")</button>
+                                                <button class="danger" @onclick="()=>DeleteCategoryConfirm(selKind,item)">×</button>
+                                            </div>
+                                        </div>
+                                    }
+                                    @if (values.Count == 0) { <p class="hint">@(I18n.Lang=="zh"?"暂无选项":"No options")</p> }
+                                    @if (string.IsNullOrEmpty(term) && values.Count > 200 && !categoryExpanded.Contains(selKind))
+                                    {
+                                        <button class="cat-more" @onclick="()=>categoryExpanded.Add(selKind)">@(I18n.Lang=="zh"?$"还有 {values.Count - 200} 项，点击展开":"+ {values.Count - 200} more")</button>
+                                    }
+                                </div>
+                                <div class="hint" style="margin-top:10px">@(I18n.Lang=="zh" ? $"显示 {shown.Count} / {values.Count} 项" : $"Showing {shown.Count} / {values.Count}")</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else if (view == "users")
+                {
+                    <div class="panel">
+                        <div class="panel-title">@I18n["users"]</div>
+                        @if (role != "SuperAdmin")
+                        {
+                            <p class="hint">@(I18n.Lang=="zh"?"仅超级管理员可管理用户。":"Only super admin can manage users.")</p>
+                        }
+                        else
+                        {
+                            <div class="toolbar">
+                                <input placeholder="@(I18n.Lang=="zh"?"新用户名":"New username")" @bind="newUser" />
+                                <input placeholder="@(I18n.Lang=="zh"?"密码":"Password")" @bind="newPwd" />
+                                <button class="primary" @onclick="DoCreateUser">@(I18n.Lang=="zh"?"创建管理员":"Create Admin")</button>
+                            </div>
+                            <table class="grid">
+                                <thead><tr><th>@(I18n.Lang=="zh"?"用户名":"Username")</th><th>@(I18n.Lang=="zh"?"角色":"Role")</th><th>MFA</th><th>@(I18n.Lang=="zh"?"创建时间":"Created")</th></tr></thead>
+                                <tbody>
+                                    @foreach (var u in users)
+                                    {
+                                        <tr><td>@u.Username</td><td>@u.Role</td><td>@(u.MfaEnabled?"✓":"—")</td><td>@u.CreatedAt.ToString("yyyy-MM-dd")</td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                }
+                else if (view == "llm")
+                {
+                    <div class="panel">
+                        <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                            <span>@(I18n.Lang=="zh"?"模型服务":"Model Providers") <span class="badge manual" style="margin-left:6px">@llmConfigs.Count</span></span>
+                            <button class="primary" @onclick="OpenProviderForm">+ @(I18n.Lang=="zh"?"添加自定义提供商":"Add Provider")</button>
+                        </div>
+                        <p class="hint">@(I18n.Lang=="zh"
+                            ? "可添加多个 API 站点，每个站点可挂多个模型（可自定义任意模型名）；点卡片上的模型名可切换当前使用项。标记为默认的站点用于链接识别与批量补料。"
+                            : "Add multiple API endpoints, each with multiple models (any custom name). Click a model on the card to switch the active one. The default provider is used for recognition and batch enrichment.")</p>
+
+                        @if (llmConfigs.Count == 0)
+                        {
+                            <p class="hint" style="padding:18px 0">@(I18n.Lang=="zh"?"还没有配置，点击右上角添加。":"No providers yet. Add one at the top right.")</p>
+                        }
+                        else
+                        {
+                            <div class="provider-list">
+                                @foreach (var c in llmConfigs)
+                                {
+                                    <div class="provider-card @(c.IsDefault?"on":"")">
+                                        <div class="provider-main">
+                                            <div class="provider-name">
+                                                @c.Name
+                                                <span class="proto-pill">@(string.IsNullOrEmpty(c.Protocol)?"openai":c.Protocol)</span>
+                                                @if (c.IsDefault) { <span class="badge ai">@(I18n.Lang=="zh"?"默认":"Default")</span> }
+                                                @if (!c.IsConfigured) { <span class="badge manual">@(I18n.Lang=="zh"?"未完成":"Incomplete")</span> }
+                                            </div>
+                                            <div class="provider-meta">@c.ApiEndpoint</div>
+                                            <div class="provider-models">
+                                                @foreach (var m in ModelList(c))
+                                                {
+                                                    <button class="model-pill @(m==c.Model?"on":"")"
+                                                            title="@(I18n.Lang=="zh"?"设为当前模型":"Use this model")"
+                                                            @onclick="()=>SwitchModel(c,m)">@m</button>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="provider-actions">
+                                            <button @onclick="()=>TestProvider(c)" disabled="@llmTesting">@(I18n.Lang=="zh"?"检测":"Test")</button>
+                                            <button @onclick="()=>EditProvider(c)">@I18n["edit"]</button>
+                                            @if (!c.IsDefault) { <button @onclick="()=>MakeDefault(c)">@(I18n.Lang=="zh"?"设为默认":"Set default")</button> }
+                                            <button class="danger" @onclick="()=>DeleteProvider(c)">×</button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @if (llmMsg != null) { <p class="msg">@llmMsg</p> }
+                        @if (!string.IsNullOrWhiteSpace(llmTestMsg))
+                        {
+                            <p class="msg @(llmTestOk?"":"err")">
+                                @(llmTestOk ? "✓ " : "✗ ")@llmTestMsg
+                                @(llmTestOk && llmTestMs > 0 ? $" · {llmTestMs} ms" : "")
+                            </p>
+                        }
+                    </div>
+
+                    @if (providerFormOpen)
+                    {
+                        <div class="modal-mask">
+                            <div class="modal" @onclick:stopPropagation="true">
+                                <div class="modal-head">
+                                    <span>@(pfId > 0 ? (I18n.Lang=="zh"?"编辑提供商":"Edit Provider") : (I18n.Lang=="zh"?"添加自定义提供商":"Add Provider"))</span>
+                                    <button class="modal-x" @onclick="CloseProviderForm">×</button>
+                                </div>
+                                <div class="modal-body">
+                                    <label>@(I18n.Lang=="zh"?"提供商名称":"Provider name")</label>
+                                    <input @bind="pfName" placeholder="@(I18n.Lang=="zh"?"例如 OpenAI / 中转站 A":"e.g. OpenAI")" />
+
+                                    <label>API @(I18n.Lang=="zh"?"密钥":"Key")</label>
+                                    <input type="password" @bind="pfKey" placeholder="@(pfHasKey ? pfKeyMask : "sk-...")" />
+                                    @if (pfHasKey) { <p class="hint">@(I18n.Lang=="zh"?"已保存密钥，留空表示不修改。":"Key saved. Leave blank to keep it.")</p> }
+
+                                    <div class="form-section">@(I18n.Lang=="zh"?"端点设置":"Endpoint")</div>
+                                    <div class="form-2col">
+                                        <div>
+                                            <label>@(I18n.Lang=="zh"?"协议":"Protocol")</label>
+                                            <select @bind="pfProtocol">
+                                                <option value="openai">OpenAI @(I18n.Lang=="zh"?"兼容（Chat Completions）":"compatible (Chat Completions)")</option>
+                                                <option value="openai-responses">OpenAI Responses</option>
+                                                <option value="anthropic">Anthropic Messages</option>
+                                                <option value="gemini">Gemini</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label>Base URL</label>
+                                            <input @bind="pfEndpoint" placeholder="https://api.openai.com/v1" />
+                                        </div>
+                                    </div>
+                                    <p class="hint">@(I18n.Lang=="zh"?"填到版本路径即可，保存后自动拼接请求路径。":"Base URL including version path; request path is appended automatically.")</p>
+
+                                    <div class="form-section model-section-head">
+                                        <span>@(I18n.Lang=="zh"?"模型列表（可添加多个，点选当前使用）":"Models (add several, click to activate)")</span>
+                                        <button type="button" class="fetch-models" @onclick="FetchProviderModels" disabled="@pfFetchingModels">
+                                            @(pfFetchingModels
+                                                ? (I18n.Lang=="zh"?"获取中…":"Fetching…")
+                                                : (I18n.Lang=="zh"?"获取可用模型":"Fetch available models"))
+                                        </button>
+                                    </div>
+                                    <div class="model-editor">
+                                        @foreach (var m in pfModels)
+                                        {
+                                            <span class="model-chip @(m==pfModel?"on":"")" @onclick="()=>SetPfActive(m)">
+                                                <span class="chip-name">@m</span>
+                                                @if (m == pfModel) { <span class="chip-tag">@(I18n.Lang=="zh"?"当前":"active")</span> }
+                                                <button type="button" class="chip-x" title="@I18n["delete"]"
+                                                        @onclick:stopPropagation="true" @onclick="()=>RemovePfModel(m)">×</button>
+                                            </span>
+                                        }
+                                        @if (pfModels.Count == 0)
+                                        {
+                                            <span class="hint" style="margin:0">@(I18n.Lang=="zh"?"还没有模型，在下方输入后点「添加模型」":"No models yet — add one below")</span>
+                                        }
+                                    </div>
+                                    <div class="model-add">
+                                        <input @bind="pfNewModel" @onkeydown="OnPfModelKey" list="llm-model-presets"
+                                               placeholder="@(I18n.Lang=="zh"?"输入或选择模型名，例如 gpt-4o-mini":"Model name, e.g. gpt-4o-mini")" />
+                                        <button type="button" @onclick="AddPfModel">+ @(I18n.Lang=="zh"?"添加模型":"Add model")</button>
+                                    </div>
+                                    <p class="hint">@(I18n.Lang=="zh"?"模型名可任意自定义；同一站点可挂多个模型，随时切换当前使用项。":"Any model name is allowed; keep several per site and switch the active one anytime.")</p>
+                                    @if (pfFetched.Count > 0)
+                                    {
+                                        <div class="model-catalog">
+                                            <div class="mc-head">
+                                                <span>@(I18n.Lang=="zh"?"站点可用模型":"Available models") @pfFetched.Count</span>
+                                                <button type="button" @onclick="AddAllFetchedModels">@(I18n.Lang=="zh"?"全部添加":"Add all")</button>
+                                            </div>
+                                            <div class="mc-list">
+                                                @foreach (var m in pfFetched)
+                                                {
+                                                    <div class="mc-row @(IsFetchedAdded(m.Id)?"added":"")" @onclick="()=>AddFetchedModel(m.Id)">
+                                                        <span class="mc-id">@m.Id</span>
+                                                        @if (!string.IsNullOrEmpty(m.DisplayName) && m.DisplayName != m.Id)
+                                                        {
+                                                            <span class="mc-name">@m.DisplayName</span>
+                                                        }
+                                                        <span class="mc-op">@(IsFetchedAdded(m.Id)?"✓":"+")</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                    @if (pfModelsMsg != null)
+                                    {
+                                        <p class="msg @(pfModelsErr?"err":"")">@pfModelsMsg</p>
+                                    }
+                                    <datalist id="llm-model-presets">
+                                        <option value="gpt-4o-mini"></option>
+                                        <option value="gpt-4o"></option>
+                                        <option value="claude-3-5-sonnet-latest"></option>
+                                        <option value="gemini-1.5-flash"></option>
+                                        <option value="deepseek-chat"></option>
+                                        <option value="deepseek-reasoner"></option>
+                                        <option value="qwen-plus"></option>
+                                        <option value="moonshot-v1-8k"></option>
+                                        <option value="glm-4-flash"></option>
+                                    </datalist>
+
+                                    <div class="form-section">@(I18n.Lang=="zh"?"重试设置":"Retry settings")</div>
+                                    <div class="form-2col">
+                                        <div>
+                                            <label>@(I18n.Lang=="zh"?"重试策略":"Retry policy")</label>
+                                            <select @bind="pfRetryPolicy">
+                                                <option value="default">@(I18n.Lang=="zh"?"默认（仅临时错误）":"Default (transient only)")</option>
+                                                <option value="transient">@(I18n.Lang=="zh"?"仅临时错误":"Transient only")</option>
+                                                <option value="all">@(I18n.Lang=="zh"?"所有错误":"All errors")</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label>@(I18n.Lang=="zh"?"最大重试次数":"Max retries")</label>
+                                            <input type="number" min="0" max="10" @bind="pfMaxRetries" />
+                                        </div>
+                                    </div>
+                                    <label>@(I18n.Lang=="zh"?"错误类型":"Error types")</label>
+                                    <div class="retry-grid">
+                                        <label><input type="checkbox" @bind="pfRetryEmpty" /> @(I18n.Lang=="zh"?"空响应":"Empty response")</label>
+                                        <label><input type="checkbox" @bind="pfRetryFormat" /> @(I18n.Lang=="zh"?"响应格式错误":"Bad format")</label>
+                                        <label><input type="checkbox" @bind="pfRetryQuota" /> @(I18n.Lang=="zh"?"配额已用尽":"Quota exhausted")</label>
+                                        <label><input type="checkbox" @bind="pfRetryRateLimit" /> @(I18n.Lang=="zh"?"请求限流":"Rate limited")</label>
+                                        <label><input type="checkbox" @bind="pfRetryServer" /> @(I18n.Lang=="zh"?"服务器错误":"Server error")</label>
+                                        <label><input type="checkbox" @bind="pfRetryStreamEnd" /> @(I18n.Lang=="zh"?"流提前结束":"Stream cut")</label>
+                                        <label><input type="checkbox" @bind="pfRetryTimeout" /> @(I18n.Lang=="zh"?"超时":"Timeout")</label>
+                                        <label><input type="checkbox" @bind="pfRetryNetwork" /> @(I18n.Lang=="zh"?"网络错误":"Network error")</label>
+                                    </div>
+                                    <p class="hint">@(I18n.Lang=="zh"?"「默认」用内置临时错误集合；「仅临时错误」按上面勾选；「所有错误」不区分类型。":"Default uses built-in transient set; Transient uses the checked types; All retries every error.")</p>
+
+                                    <div class="checks">
+                                        <label><input type="checkbox" @bind="pfDefault" /> @(I18n.Lang=="zh"?"设为默认配置":"Set as default")</label>
+                                    </div>
+
+                                    <div class="form-section">@(I18n.Lang=="zh"?"从预设创建（可选）":"Preset (optional)")</div>
+                                    <select @onchange="ApplyProviderPreset">
+                                        <option value="">@(I18n.Lang=="zh"?"选择预设…":"Choose a preset…")</option>
+                                        <option value="openai">OpenAI</option>
+                                        <option value="anthropic">Anthropic</option>
+                                        <option value="gemini">Gemini</option>
+                                        <option value="deepseek">DeepSeek</option>
+                                        <option value="qwen">通义千问</option>
+                                        <option value="moonshot">Kimi 月之暗面</option>
+                                        <option value="zhipu">智谱 GLM</option>
+                                        <option value="siliconflow">硅基流动</option>
+                                    </select>
+
+                                    @if (pfMsg != null) { <p class="msg err">@pfMsg</p> }
+                                    @if (!string.IsNullOrWhiteSpace(pfTestMsg))
+                                    {
+                                        <p class="msg @(pfTestOk?"":"err")">
+                                            @(pfTestOk ? "✓ " : "✗ ")@pfTestMsg
+                                            @(pfTestOk && pfTestMs > 0 ? $" · {pfTestMs} ms" : "")
+                                        </p>
+                                    }
+                                </div>
+                                <div class="modal-foot">
+                                    <button @onclick="CloseProviderForm">@I18n["cancel"]</button>
+                                    <button @onclick="DoTestProvider" disabled="@llmTesting">
+                                        @(llmTesting ? (I18n.Lang=="zh"?"检测中…":"Testing…") : (I18n.Lang=="zh"?"检测":"Test"))
+                                    </button>
+                                    <button class="primary" @onclick="SaveProvider" disabled="@pfBusy">@I18n["save"]</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else if (view == "account")
+                {
+                    <div class="panel">
+                        <div class="panel-title">@I18n["accountInfo"]</div>
+                        <div class="kv-row"><span>@I18n["username"]</span><b>@user</b></div>
+                        <div class="kv-row"><span>@I18n["role"]</span><b>@role</b></div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-title">
+                            @I18n["mfaSettings"]
+                            <span class="badge @(myMfaEnabled?"ai":"manual")" style="margin-left:8px">
+                                @(myMfaEnabled ? (I18n.Lang=="zh"?"已开启":"Enabled") : (I18n.Lang=="zh"?"未开启":"Disabled"))
+                            </span>
+                        </div>
+                        <p class="hint">@(I18n.Lang=="zh"
+                            ? "开启后登录需额外输入验证器 App 的 6 位动态码，显著提升账号安全性。"
+                            : "When enabled, sign-in requires a 6-digit code from your authenticator app.")</p>
+
+                        @if (!myMfaEnabled && mfaSetup is null)
+                        {
+                            <button class="primary" @onclick="StartMfaSetup" disabled="@mfaBusy">@I18n["enableMfa"]</button>
+                        }
+
+                        @if (mfaSetup is not null && !myMfaEnabled)
+                        {
+                            <div class="mfa-setup">
+                                <p class="hint">@(I18n.Lang=="zh" ? "1. 在验证器 App（Google Authenticator / Microsoft Authenticator 等）中手动添加账号，密钥如下：" : "1. Add an account manually in your authenticator app with this key:")</p>
+                                <div class="secret-box">
+                                    <code>@mfaSetup.Secret</code>
+                                    <button type="button" @onclick="()=>CopyText(mfaSetup.Secret)">@I18n["copy"]</button>
+                                </div>
+                                <p class="hint">@(I18n.Lang=="zh" ? "2. 输入 App 显示的 6 位动态码完成绑定：" : "2. Enter the 6-digit code shown in the app:")</p>
+                                <div class="toolbar" style="margin:0">
+                                    <input @bind="mfaCode" placeholder="000000" maxlength="6" style="width:130px" />
+                                    <button class="primary" @onclick="ConfirmMfa" disabled="@mfaBusy">@I18n["confirmEnable"]</button>
+                                    <button @onclick="CancelMfaSetup">@I18n["cancel"]</button>
+                                </div>
+                            </div>
+                        }
+
+                        @if (myMfaEnabled)
+                        {
+                            <label>@(I18n.Lang=="zh"?"输入当前动态码以关闭":"Enter current code to disable")</label>
+                            <div class="toolbar" style="margin:0">
+                                <input @bind="mfaCode" placeholder="000000" maxlength="6" style="width:130px" />
+                                <button class="danger" @onclick="DisableMfaNow" disabled="@mfaBusy">@I18n["disableMfa"]</button>
+                            </div>
+                        }
+
+                        @if (mfaMsg != null) { <p class="msg @(mfaErr?"err":"")">@mfaMsg</p> }
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-title">@(I18n.Lang=="zh"?"导出数据":"Export data")</div>
+                        <p class="hint">@(I18n.Lang=="zh"
+                            ? "导出链接、发布库、数量统计与部署/备份信息（zip）。包内不含数据库口令、JWT 密钥、LLM API Key 或用户密码。"
+                            : "Export links, libraries, counts and deployment/backup info as a zip. No secrets or password hashes are included.")</p>
+                        <label>@(I18n.Lang=="zh"?"输入当前账号密码以确认":"Enter your password to confirm")</label>
+                        <input type="password" @bind="exportPwd" @onkeydown="OnExportKey" placeholder="••••••••" autocomplete="current-password" />
+                        <div class="btn-row">
+                            <button class="primary" @onclick="DoExportPackage" disabled="@exportPkgBusy">
+                                @(exportPkgBusy
+                                    ? (I18n.Lang=="zh"?"正在打包…":"Packaging…")
+                                    : (I18n.Lang=="zh"?"生成并下载压缩包":"Generate & download zip"))
+                            </button>
+                        </div>
+                        @if (exportPkgMsg != null) { <p class="msg @(exportPkgErr?"err":"")">@exportPkgMsg</p> }
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-title">@I18n["changePassword"]</div>
+                        <label>@I18n["currentPassword"]</label>
+                        <input type="password" @bind="oldPwd" />
+                        <label>@I18n["newPassword"]</label>
+                        <input type="password" @bind="newPwd2" placeholder="@(I18n.Lang=="zh"?"至少 8 位":"At least 8 characters")" />
+                        <label>@I18n["confirmPassword"]</label>
+                        <input type="password" @bind="newPwd3" />
+                        <button class="primary" @onclick="DoChangePassword" disabled="@pwdBusy">@I18n["save"]</button>
+                        @if (pwdMsg != null) { <p class="msg @(pwdErr?"err":"")">@pwdMsg</p> }
+                    </div>
+                }
+            </div>
+
+            @* 通用确认/重命名弹窗：替代浏览器原生 prompt/confirm，所有功能页共用 *@
+            @if (askOpen)
+            {
+                <div class="modal-mask">
+                    <div class="modal modal-sm" @onclick:stopPropagation="true">
+                        <div class="modal-head">
+                            <span>@askTitle</span>
+                            <button class="modal-x" @onclick="CloseAsk">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="warn-box">@askMessage</div>
+                            @if (askKind == "rename")
+                            {
+                                <label>@(I18n.Lang=="zh"?"输入新名称":"New name")</label>
+                                <input @bind="askValue" @onkeydown="OnAskKey" placeholder="@(I18n.Lang=="zh"?"新名称":"New name")" />
+                            }
+                        </div>
+                        <div class="modal-foot">
+                            <button @onclick="CloseAsk">@I18n["cancel"]</button>
+                            <button class="@(askKind=="delete" ? "danger-solid" : "primary")" @onclick="ConfirmAsk" disabled="@askBusy">
+                                @(askBusy ? (I18n.Lang=="zh"?"处理中…":"Working…") : (I18n.Lang=="zh"?"确认":"Confirm"))
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </main>
+    </div>
+}
+
+@code {
+    // ---- 登录 ----
+    private bool loggedIn;
+    /// <summary>会话是否已检查完成；false 时只显示骨架，不渲染登录表单</summary>
+    private bool authChecked;
+    private string user = "admin", pwd = "", captchaCode = "", totp = "";
+    // 验证码图片直出：src 指向后端图片接口，刷新只换 query，零 API/JSON/JS 依赖
+    private string captchaSrc = "api/auth/captcha/image?t=" + Guid.NewGuid().ToString("N");
+    private string role = "", error = "";
+    private bool busy, mfaNeeded;
+
+    // ---- 控制台 ----
+    private string view = "dashboard", q = "", srcFilter = "";
+    private List<LinkDto> links = [];
+    private HashSet<int> selected = [];
+    private int total;
+    private List<UserDto> users = [];
+    private string newUser = "", newPwd = "";
+    private string pasteText = "", parseJson = "";
+    // 导入弹窗（已并入发布库，导入到当前选中的库）
+    private bool importOpen, parseBusy, importBusy, importErr;
+    private string importTab = "ai";
+    private string? importMsg;
+    private ExcelImportStatus? importStatus;
+    private Timer? importTimer;
+    private bool importPolling;
+    // 删除发布库：密码二次确认
+    private bool libDelOpen, libDelBusy;
+    private LibraryDto? libDelTarget;
+    private string libDelPwd = "", libDelMsg = "";
+    // 链接去重
+    private bool dedupeOpen, dedupeBusy, dedupeAll;
+    private DedupeResult? dedupeResult;
+    private string? dedupeMsg;
+    private string llmEndpoint = "", llmKey = "", llmModel = "", llmMsg = "";
+    private bool llmHasKey;
+    private string llmKeyMask = "";
+    // 多提供商（多站点 / 多模型）
+    private List<LlmConfigDto> llmConfigs = [];
+    private bool providerFormOpen;
+    private int pfId;
+    private string pfName = "", pfProtocol = "openai", pfEndpoint = "", pfKey = "", pfModel = "";
+    private List<string> pfModels = [];
+    private string pfNewModel = "";
+    private List<LlmModelDto> pfFetched = [];
+    private string pfRetryPolicy = "default";
+    private int pfMaxRetries = 8;
+    private bool pfRetryEmpty = true, pfRetryFormat, pfRetryQuota, pfRetryRateLimit = true,
+                 pfRetryServer = true, pfRetryStreamEnd, pfRetryTimeout = true, pfRetryNetwork = true;
+    private bool pfFetchingModels;
+    private string? pfModelsMsg;
+    private bool pfModelsErr;
+    private bool pfDefault, pfHasKey, pfBusy;
+    private string pfKeyMask = "", pfMsg = "";
+    // LLM 测试连接
+    private bool llmTesting, llmTestOk;
+    private string llmTestMsg = "";
+    private long llmTestMs;
+    // 弹窗内的「检测」结果：与卡片上的检测分开，避免消息跑到弹窗后面
+    private string? pfTestMsg;
+    private bool pfTestOk;
+    private long pfTestMs;
+    // 发布管理两列折叠
+    private bool navFolded;      // 左侧功能菜单（侧边栏）折叠
+    private bool libFolded;      // 发布库列折叠；链接管理列始终显示
+    private readonly HashSet<int> busyChannels = []; // 正在切换显示渠道的发布库，防重复点击
+    private IBrowserFile? excelFile;
+    private Dictionary<string, object> stats = new();
+
+    // ---- 发布库 ----
+    private List<LibraryDto> libraries = [];
+    private int? currentLibId;
+    private string? currentLibName;
+    private bool libFormOpen, libEditing;
+    private int libEditingId;
+    private string libName = "", libDesc = "", libMsg = "", publishMsg = "";
+    private bool libWeb = true, libClient = true;
+    // 移动到/复制到
+    private int targetLibId;
+    private string? transferMsg;
+    private bool transferErr;
+    // ---- 链接新建/编辑 ----
+    // ---- 通用确认弹窗（替代浏览器原生 prompt/confirm） ----
+    private bool askOpen, askBusy;
+    private string askKind = "delete", askTitle = "", askMessage = "", askValue = "";
+    private Func<string, Task>? askAction;
+
+    private bool linkFormOpen, linkEditing;
+    private int linkEditingId;
+    private string lfTitle = "", lfUrl = "", lfGroup = "", lfPlatform = "", lfTags = "", lfRemark = "", linkFormMsg = "";
+    private string lfLinkType = "", lfExtractCode = "", lfExpireAt = "", lfVersion = "";
+    private List<LinkDraft> linkDrafts = [];
+    private string lfSelectedTagsText = "";
+    private List<string> categoryGroups = [], categoryPlatforms = [], categoryTags = [], categoryLinkTypes = [];
+    private static bool IsNetDisk(string? type) => string.Equals(type?.Trim(), "网盘", StringComparison.Ordinal);
+    private Dictionary<string, string> categoryNewName = new() { ["group"] = "", ["platform"] = "", ["type"] = "", ["tag"] = "" };
+    private Dictionary<string, string> categorySearch = new() { ["group"] = "", ["platform"] = "", ["type"] = "", ["tag"] = "" };
+    private HashSet<string> categoryExpanded = [];
+    private string selCategoryKind = "group";
+    private bool catFolded;
+    private void SelectCategory(string kind) => selCategoryKind = kind;
+    private Dictionary<string, HashSet<string>> categorySelected = new() { ["group"] = [], ["platform"] = [], ["type"] = [], ["tag"] = [] };
+    private int CategorySelectedCount => categorySelected.Values.Sum(x => x.Count);
+    private HashSet<string> CategorySelection(string kind) => categorySelected.TryGetValue(kind, out var set) ? set : categorySelected[kind] = [];
+    private bool IsCategorySelected(string kind, string name) => CategorySelection(kind).Contains(name);
+    private void ToggleCategorySelection(string kind, string name, bool selected)
+    {
+        var set = CategorySelection(kind);
+        if (selected) set.Add(name); else set.Remove(name);
+    }
+    private void ToggleVisibleCategorySelection(string kind, IEnumerable<string> shown, bool selected)
+    {
+        var set = CategorySelection(kind);
+        foreach (var name in shown) { if (selected) set.Add(name); else set.Remove(name); }
+    }
+    private void ClearCategorySelection() { foreach (var set in categorySelected.Values) set.Clear(); }
+    private string categoryMsg = "";
+    private bool categoryErr;
+    private IEnumerable<(string kind, string title)> CategorySections => new[]
+    {
+        ("group", I18n.Lang == "zh" ? "分组" : "Groups"),
+        ("platform", I18n.Lang == "zh" ? "平台" : "Platforms"),
+        ("type", I18n.Lang == "zh" ? "链接形式" : "Types"),
+        ("tag", I18n.Lang == "zh" ? "标签" : "Tags")
+    };
+
+    // ---- 批量 AI 补料 / 导出 ----
+    private BatchEnrichStatus? enrichStatus;
+    private string enrichMode = "missing";
+    private int enrichLimit = 100;
+    private bool exporting;
+    private string exportMsg = "";
+    private System.Threading.Timer? enrichTimer;
+
+    // ---- 账号设置 / MFA ----
+    private bool myMfaEnabled;
+    private MfaSetupDto? mfaSetup;
+    private string mfaCode = "", mfaMsg = "";
+    private bool mfaErr, mfaBusy;
+    private string oldPwd = "", newPwd2 = "", newPwd3 = "", pwdMsg = "";
+    // 导出数据压缩包
+    private string exportPwd = "";
+    private bool exportPkgBusy, exportPkgErr;
+    private string? exportPkgMsg;
+    private bool pwdErr, pwdBusy;
+
+    private string ViewTitle => view switch
+    {
+        "publish" => I18n["publish"], "import" => I18n["import"], "categories" => I18n.Lang == "zh" ? "分组管理" : "Categories", "users" => I18n["users"],
+        "llm" => I18n["llm"], "account" => I18n["accountSettings"], _ => I18n["dashboard"]
+    };
+
+    /// <summary>地址栏后缀：dashboard / publish / users / llm / account</summary>
+    [Parameter] public string? Section { get; set; }
+    private bool sectionApplied;
+
+    protected override void OnInitialized()
+    {
+        I18n.OnChange += StateHasChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var raw = (Section ?? string.Empty).Trim().ToLowerInvariant();
+        var target = raw switch
+        {
+            "publish" or "links" => "publish",
+            "users" => "users",
+            "categories" => "categories",
+            "llm" => "llm",
+            "account" => "account",
+            _ => "dashboard"
+        };
+        // 未知后缀统一落到看板，并纠正地址栏
+        if (raw is not ("" or "dashboard" or "publish" or "links" or "users" or "categories" or "llm" or "account"))
+            Nav.NavigateTo("dashboard", replace: true);
+
+        if (sectionApplied && view == target) return;
+        view = target;
+        sectionApplied = true;
+        if (!loggedIn) return; // 首屏等 OnAfterRender 里读完 token 再加载
+
+        await ApplySectionAsync(target);
+    }
+
+    /// <summary>按当前功能加载所需数据（发布管理要拉发布库+链接，账号设置要拉 MFA 状态）。</summary>
+    private async Task ApplySectionAsync(string target)
+    {
+        if (target == "publish")
+        {
+            await LoadLibraries();
+            if (currentLibId is null && libraries.Count > 0) await SelectLibrary(libraries[0].Id);
+            else await LoadLinks();
+        }
+        else if (target == "categories")
+        {
+            await LoadCategories();
+        }
+        else if (target == "account")
+        {
+            mfaSetup = null; mfaCode = ""; mfaMsg = ""; pwdMsg = "";
+            myMfaEnabled = await Api.GetMyMfaStatus();
+        }
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // JS interop 必须等首次渲染后再调用（首屏 JS runtime 可能未就绪，读 localStorage 会返回 null）
+        await I18n.InitAsync();
+        var token = await JS.InvokeAsync<string>("localStorage.getItem", "durlinks_token");
+
+        // 控制台必须已登录：无令牌直接回到静态登录页（不在 /console/ 渲染登录表单，避免闪屏）
+        if (string.IsNullOrEmpty(token))
+        {
+            Nav.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        user = await JS.InvokeAsync<string>("localStorage.getItem", "durlinks_user") ?? "admin";
+        role = await JS.InvokeAsync<string>("localStorage.getItem", "durlinks_role") ?? "Admin";
+        loggedIn = true;
+
+        try
+        {
+            await LoadAll();
+        }
+        catch
+        {
+            // 数据加载失败不阻断进入控制台（避免网络抖动把用户踢回登录页）
+        }
+
+        try { await ApplySectionAsync(view); }
+        catch { /* 分功能加载失败不阻断进入控制台 */ }
+
+        // 数据就绪后再切走骨架：从骨架直接过渡到完整界面，不会看到「0 条」闪变
+        authChecked = true;
+        StateHasChanged();
+    }
+
+    private async Task SwitchLang(string lang) => await I18n.SetLangAsync(lang);
+    private async Task SwitchZh() => await I18n.SetLangAsync("zh");
+    private async Task SwitchEn() => await I18n.SetLangAsync("en");
+
+    /// <summary>刷新验证码：只换图片 URL 的 query，浏览器重新请求，后端覆盖 Cookie 中的 ticket。无需 API/JSON/JS 时序。</summary>
+    private void RefreshCaptcha()
+    {
+        captchaSrc = "api/auth/captcha/image?t=" + Guid.NewGuid().ToString("N");
+        captchaCode = "";
+    }
+
+    private async Task CheckUserMfa()
+    {
+        if (string.IsNullOrWhiteSpace(user)) { mfaNeeded = false; return; }
+        mfaNeeded = await Api.CheckMfa(user);
+        if (!mfaNeeded) totp = "";
+    }
+
+    private async Task OnLoginKey(KeyboardEventArgs e) { if (e.Key == "Enter") await DoLogin(); }
+
+    private async Task DoLogin()
+    {
+        error = ""; busy = true;
+        try
+        {
+            var res = await Api.Login(user, pwd, mfaNeeded && !string.IsNullOrWhiteSpace(totp) ? totp : null, "", captchaCode);
+            if (!res.Ok)
+            {
+                error = res.Message == "Captcha is wrong or expired" ? I18n["captchaWrong"]
+                      : res.Message == "MFA 动态码错误" ? (I18n.Lang=="zh"?"MFA 动态码错误":"MFA code error")
+                      : I18n["loginFailed"];
+                captchaCode = ""; RefreshCaptcha(); return;
+            }
+            if (res.Response != null)
+            {
+                await JS.InvokeVoidAsync("localStorage.setItem", "durlinks_token", res.Response.Token);
+                await JS.InvokeVoidAsync("localStorage.setItem", "durlinks_user", res.Response.Username);
+                await JS.InvokeVoidAsync("localStorage.setItem", "durlinks_role", res.Response.Role);
+                user = res.Response.Username; role = res.Response.Role; loggedIn = true;
+                await LoadAll();
+            }
+        }
+        catch (Exception ex) { error = ex.Message; RefreshCaptcha(); }
+        finally { busy = false; }
+    }
+
+    private async Task Logout()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.removeItem", "durlinks_token");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "durlinks_user");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "durlinks_role");
+        }
+        catch { }
+        // 回到静态登录页（控制台不再内置登录表单）
+        Nav.NavigateTo("/", forceLoad: true);
+    }
+
+    private async Task LoadAll()
+    {
+        await LoadStats(); await LoadLinks();
+        // 若服务端仍有批量补料任务在跑（例如刷新过页面），恢复进度轮询
+        enrichStatus = await Api.GetBatchEnrichStatus();
+        if (enrichStatus?.Running == true && enrichTimer == null) StartEnrichPolling();
+        if (role == "SuperAdmin") users = await Api.Users() ?? [];
+        llmConfigs = await Api.ListLlmConfigs();
+        var cfg = llmConfigs.FirstOrDefault(x => x.IsDefault) ?? llmConfigs.FirstOrDefault();
+        if (cfg != null)
+        {
+            llmEndpoint = cfg.ApiEndpoint; llmModel = cfg.Model;
+            // 后端只返回掩码，输入框留空表示不修改
+            llmHasKey = cfg.HasApiKey; llmKeyMask = cfg.ApiKey; llmKey = "";
+        }
+    }
+
+    private async Task LoadStats()
+    { try { stats = await Api.GetStats() ?? new(); } catch { } }
+
+    private async Task LoadLinks()
+    {
+        ImportSource? src = string.IsNullOrEmpty(srcFilter) ? null : (ImportSource)int.Parse(srcFilter);
+        var r = await Api.ListLinks(new LinkQuery { Q = q, ImportSource = src, LibraryId = currentLibId, Page = 1, PageSize = 100 });
+        links = r?.Items ?? []; total = r?.Total ?? 0;
+    }
+
+    // stats 来自 JSON 反序列化，数字是 JsonElement，直接 Convert.ToInt32 会抛 InvalidCastException
+    private int Num(string key)
+    {
+        if (!stats.TryGetValue(key, out var v)) return 0;
+        if (v is int i) return i;
+        if (v is long l) return (int)l;
+        if (v is double d) return (int)d;
+        if (v is System.Text.Json.JsonElement je)
+        {
+            if (je.ValueKind == System.Text.Json.JsonValueKind.Number) return je.GetInt32();
+            if (int.TryParse(je.ToString(), out var n)) return n;
+        }
+        return int.TryParse(v?.ToString(), out var m) ? m : 0;
+    }
+
+    private int BarH(string key)
+    {
+        var t = Num("total");
+        if (t == 0) return 0;
+        var v = key switch
+        {
+            "manual" => t - Num("aiCount"),
+            "ai" => Num("aiCount"),
+            "netdisk" => Num("netdisk"),
+            _ => Num("download")
+        };
+        return Math.Max(5, (int)((double)v / t * 100));
+    }
+
+    private void ViewDashboard() => Go("dashboard");
+    private void Go(string section)
+    {
+        if (view == section) return;
+        Nav.NavigateTo(section); // 相对 base(/console/)，生成 /console/publish 这类后缀
+    }
+    // ---- 发布管理 ----
+    private void ViewPublish() => Go("publish");
+
+    private async Task LoadLibraries()
+    {
+        libraries = await Api.Libraries();
+        var cur = libraries.FirstOrDefault(x => x.Id == currentLibId);
+        currentLibName = cur?.Name;
+        if (cur is null && libraries.Count > 0)
+        {
+            currentLibId = libraries[0].Id;
+            currentLibName = libraries[0].Name;
+        }
+    }
+
+    private async Task SelectLibrary(int id)
+    {
+        currentLibId = id;
+        currentLibName = libraries.FirstOrDefault(x => x.Id == id)?.Name;
+        selected.Clear();
+        await LoadLinks();
+    }
+
+    private void StartNewLibrary()
+    {
+        libFormOpen = true; libEditing = false; libEditingId = 0;
+        libName = ""; libDesc = ""; libWeb = true; libClient = true; libMsg = null;
+    }
+
+    private void EditLibrary(LibraryDto lib)
+    {
+        libFormOpen = true; libEditing = true; libEditingId = lib.Id;
+        libName = lib.Name; libDesc = lib.Description ?? "";
+        libWeb = lib.VisibleOnWeb; libClient = lib.VisibleOnClient; libMsg = null;
+    }
+
+    /// <summary>卡片上直接切换发布库在网页端/客户端的显示，无需进编辑表单。</summary>
+    private async Task ToggleChannel(LibraryDto lib, bool web)
+    {
+        if (busyChannels.Contains(lib.Id)) return;
+        busyChannels.Add(lib.Id);
+        libMsg = null;
+        try
+        {
+            var req = new LibrarySaveRequest
+            {
+                Name = lib.Name, Description = lib.Description,
+                VisibleOnWeb = web ? !lib.VisibleOnWeb : lib.VisibleOnWeb,
+                VisibleOnClient = web ? lib.VisibleOnClient : !lib.VisibleOnClient
+            };
+            var (ok, msg) = await Api.UpdateLibrary(lib.Id, req);
+            if (!ok) { libMsg = msg; return; }
+            if (web) lib.VisibleOnWeb = req.VisibleOnWeb; else lib.VisibleOnClient = req.VisibleOnClient;
+        }
+        finally { busyChannels.Remove(lib.Id); }
+    }
+
+    // ---------- 链接去重 ----------
+    private void OpenDedupe()
+    {
+        dedupeOpen = true; dedupeResult = null; dedupeMsg = null; dedupeBusy = false;
+    }
+
+    private void CloseDedupe()
+    {
+        if (dedupeBusy) return;
+        dedupeOpen = false;
+    }
+
+    private async Task PreviewDedupe()
+    {
+        dedupeBusy = true; dedupeMsg = null;
+        try
+        {
+            dedupeResult = await Api.DedupeLinks(new DedupeRequest
+            {
+                Scope = dedupeAll ? "all" : "library",
+                LibraryId = currentLibId,
+                DryRun = true
+            });
+        }
+        catch (Exception ex) { dedupeMsg = ex.Message; }
+        finally { dedupeBusy = false; }
+    }
+
+    private async Task ConfirmDedupe()
+    {
+        dedupeBusy = true; dedupeMsg = null;
+        try
+        {
+            var result = await Api.DedupeLinks(new DedupeRequest
+            {
+                Scope = dedupeAll ? "all" : "library",
+                LibraryId = currentLibId,
+                DryRun = false
+            });
+            dedupeOpen = false;
+            dedupeResult = result;
+            await LoadLinks();
+            await LoadLibraries();
+            if (!string.IsNullOrEmpty(publishMsg)) publishMsg = null;
+        }
+        catch (Exception ex) { dedupeMsg = ex.Message; }
+        finally { dedupeBusy = false; }
+    }
+
+    private async Task SaveLibrary()
+    {
+        libMsg = null;
+        if (string.IsNullOrWhiteSpace(libName)) { libMsg = I18n.Lang == "zh" ? "请填写名称" : "Name required"; return; }
+        var req = new LibrarySaveRequest
+        {
+            Name = libName.Trim(), Description = libDesc,
+            VisibleOnWeb = libWeb, VisibleOnClient = libClient
+        };
+        var (ok, msg) = libEditing
+            ? await Api.UpdateLibrary(libEditingId, req)
+            : await Api.CreateLibrary(req);
+        if (!ok) { libMsg = msg; return; }
+        libFormOpen = false;
+        await LoadLibraries();
+        if (!libEditing && libraries.Count > 0) await SelectLibrary(libraries[^1].Id);
+        else await LoadLinks();
+    }
+
+    /// <summary>删除发布库第一步：弹出密码确认框（软删除且连带链接，必须二次验证）。</summary>
+    private void RemoveLibrary(LibraryDto lib)
+    {
+        libDelTarget = lib;
+        libDelPwd = ""; libDelMsg = ""; libDelBusy = false;
+        libDelOpen = true;
+    }
+
+    private void CloseLibDelete()
+    {
+        libDelOpen = false; libDelTarget = null;
+        libDelPwd = ""; libDelMsg = "";
+    }
+
+    private async Task OnLibDelKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ConfirmDeleteLibrary();
+    }
+
+    private async Task ConfirmDeleteLibrary()
+    {
+        if (libDelTarget is null) return;
+        if (string.IsNullOrWhiteSpace(libDelPwd))
+        {
+            libDelMsg = I18n.Lang == "zh" ? "请输入当前账号密码" : "Enter your password";
+            return;
+        }
+        var targetId = libDelTarget.Id;
+        var targetName = libDelTarget.Name;
+        libDelBusy = true; libDelMsg = null;
+        try
+        {
+            var (ok, msg) = await Api.DeleteLibrary(targetId, libDelPwd);
+            if (!ok)
+            {
+                libDelMsg = msg ?? (I18n.Lang == "zh" ? "删除失败" : "Delete failed");
+                return;
+            }
+            CloseLibDelete();
+            if (currentLibId == targetId) currentLibId = null;
+            await LoadLibraries();
+            if (libraries.Count > 0) await SelectLibrary(libraries[0].Id);
+            else { links = []; total = 0; }
+            await LoadStats();
+            publishMsg = I18n.Lang == "zh" ? $"已删除发布库「{targetName}」" : $"Library \"{targetName}\" deleted";
+        }
+        finally { libDelBusy = false; }
+    }
+
+    // ---- 链接新建/编辑 ----
+    private async Task MoveSelected()
+    {
+        if (selected.Count == 0 || targetLibId == 0) return;
+        transferMsg = null; transferErr = false;
+        var (ok, msg, n) = await Api.MoveLinks(selected.ToList(), targetLibId);
+        if (!ok) { transferMsg = msg ?? "移动失败"; transferErr = true; return; }
+        transferMsg = I18n.Lang == "zh" ? $"已移动 {n} 条" : $"Moved {n}";
+        selected.Clear(); targetLibId = 0;
+        await LoadLinks(); await LoadLibraries();
+    }
+
+    private async Task CopySelected()
+    {
+        if (selected.Count == 0 || targetLibId == 0) return;
+        transferMsg = null; transferErr = false;
+        var (ok, msg, n) = await Api.CopyLinks(selected.ToList(), targetLibId);
+        if (!ok) { transferMsg = msg ?? "复制失败"; transferErr = true; return; }
+        transferMsg = I18n.Lang == "zh" ? $"已复制 {n} 条" : $"Copied {n}";
+        targetLibId = 0;
+        await LoadLinks(); await LoadLibraries();
+    }
+
+    private void CloseLinkForm()
+    {
+        linkFormOpen = false;
+        linkFormMsg = null;
+    }
+
+    private async Task StartNewLink()
+    {
+        await LoadCategories();
+        linkFormOpen = true; linkEditing = false; linkEditingId = 0;
+        lfTitle = ""; lfUrl = ""; lfGroup = ""; lfPlatform = ""; lfTags = ""; lfRemark = "";
+        lfLinkType = ""; lfExtractCode = ""; lfExpireAt = ""; lfVersion = "";
+        lfSelectedTagsText = "";
+        linkDrafts = [new LinkDraft()];
+        linkFormMsg = "";
+    }
+
+    private async Task EditLink(LinkDto l)
+    {
+        await LoadCategories();
+        linkFormOpen = true; linkEditing = true; linkEditingId = l.Id;
+        lfTitle = l.Title; lfUrl = l.Url; lfGroup = l.GroupName;
+        lfPlatform = l.Platform ?? ""; lfTags = string.Join(", ", l.Tags); lfRemark = l.Remark ?? "";
+        lfLinkType = l.LinkType ?? ""; lfExtractCode = l.ExtractCode ?? ""; lfExpireAt = l.ExpireAt ?? ""; lfVersion = l.Version ?? "";
+        lfSelectedTagsText = string.Join(", ", l.Tags);
+        linkFormMsg = "";
+    }
+
+    private async Task SaveLinkForm()
+    {
+        linkFormMsg = "";
+        if (linkEditing)
+        {
+            var (ok, msg) = await Api.UpdateLink(linkEditingId, new LinkUpdateRequest
+            {
+                LibraryId = currentLibId, Title = lfTitle, Url = lfUrl, GroupName = NormalizeMulti(lfGroup),
+                Platform = NormalizeMulti(lfPlatform), LinkType = lfLinkType,
+                ExtractCode = lfExtractCode, ExpireAt = lfExpireAt, Version = lfVersion,
+                Remark = lfRemark, Tags = ParseTags(lfSelectedTagsText)
+            });
+            if (!ok) { linkFormMsg = msg ?? "保存失败"; return; }
+        }
+        else
+        {
+            var drafts = linkDrafts.Where(d => !string.IsNullOrWhiteSpace(d.Title) || !string.IsNullOrWhiteSpace(d.Url)).ToList();
+            if (drafts.Count == 0) { linkFormMsg = I18n.Lang == "zh" ? "请至少填写一条链接" : "Enter at least one link"; return; }
+            var created = 0;
+            for (var i = 0; i < drafts.Count; i++)
+            {
+                var draft = drafts[i];
+                var (ok, msg) = await Api.CreateLink(new LinkCreateRequest
+                {
+                    LibraryId = currentLibId, Title = draft.Title, Url = draft.Url, GroupName = NormalizeMulti(draft.GroupName),
+                    Platform = NormalizeMulti(draft.Platform), LinkType = draft.LinkType,
+                    ExtractCode = draft.ExtractCode, ExpireAt = draft.ExpireAt, Version = draft.Version,
+                    Remark = draft.Remark,
+                    Tags = draft.Tags
+                });
+                if (!ok)
+                {
+                    linkFormMsg = created > 0
+                        ? (I18n.Lang == "zh" ? $"已保存 {created} 条；第 {i + 1} 条失败：{msg ?? "保存失败"}" : $"Saved {created}; row {i + 1} failed: {msg ?? "Save failed"}")
+                        : (msg ?? (I18n.Lang == "zh" ? $"第 {i + 1} 条保存失败" : $"Row {i + 1} failed"));
+                    await LoadLinks();
+                    await LoadLibraries();
+                    return;
+                }
+                created++;
+            }
+        }
+        // 把本次输入的新选项写回字典，实现「可选也可新建」
+        await EnsureCategoriesFromForm();
+        linkFormOpen = false;
+        await LoadLinks();
+        await LoadLibraries();
+    }
+
+    /// <summary>新建/编辑时输入的新分组、平台、标签、链接形式自动补入字典（已存在则忽略）。</summary>
+    private async Task EnsureCategoriesFromForm()
+    {
+        var groups = new HashSet<string>(StringComparer.Ordinal);
+        var platforms = new HashSet<string>(StringComparer.Ordinal);
+        var tags = new HashSet<string>(StringComparer.Ordinal);
+        var types = new HashSet<string>(StringComparer.Ordinal);
+        if (linkEditing)
+        {
+            foreach (var g in ParseTags(lfGroup)) groups.Add(g);
+            foreach (var p in ParseTags(lfPlatform)) platforms.Add(p);
+            foreach (var t in ParseTags(lfSelectedTagsText)) tags.Add(t);
+            if (!string.IsNullOrWhiteSpace(lfLinkType)) types.Add(lfLinkType.Trim());
+        }
+        else
+        {
+            foreach (var d in linkDrafts)
+            {
+                foreach (var g in ParseTags(d.GroupName)) groups.Add(g);
+                foreach (var p in ParseTags(d.Platform)) platforms.Add(p);
+                foreach (var t in d.Tags) tags.Add(t);
+                if (!string.IsNullOrWhiteSpace(d.LinkType)) types.Add(d.LinkType.Trim());
+            }
+        }
+        // 只提交字典里尚不存在的值，避免已存在项产生 409 噪音
+        var known = new (string kind, HashSet<string> set)[]
+        {
+            ("group", categoryGroups.ToHashSet(StringComparer.Ordinal)),
+            ("platform", categoryPlatforms.ToHashSet(StringComparer.Ordinal)),
+            ("type", categoryLinkTypes.ToHashSet(StringComparer.Ordinal)),
+            ("tag", categoryTags.ToHashSet(StringComparer.Ordinal))
+        };
+        foreach (var (kind, values) in new (string, IEnumerable<string>)[]
+                 { ("group", groups), ("platform", platforms), ("type", types), ("tag", tags) })
+        {
+            var existing = known.First(x => x.kind == kind).set;
+            foreach (var name in values.Where(x => !existing.Contains(x)))
+                await Api.CreateCategory(kind, name);
+        }
+        await LoadCategories();
+    }
+    /// <summary>导入中心已并入发布库：从任意入口打开都会切到发布管理并弹出导入框。</summary>
+    private void OpenImportModal()
+    {
+        if (view != "publish") Nav.NavigateTo("publish");
+        if (currentLibId is null && libraries.Count > 0) SelectLibrary(libraries[0].Id);
+        importOpen = true; importMsg = null; importErr = false; parseJson = null;
+        _ = ResumeImportStatusAsync();
+    }
+
+    /// <summary>重新打开弹窗时若后台仍在导入，继续显示进度。</summary>
+    private async Task ResumeImportStatusAsync()
+    {
+        var st = await Api.ExcelImportStatus();
+        if (st is null) return;
+        importStatus = st;
+        // 只有仍在跑的任务才续上进度；已结束任务的结果不在新页面/重开弹窗时回放
+        if (st.Running) StartImportPolling();
+        StateHasChanged();
+    }
+    private void CloseImportModal() => importOpen = false;
+    private void SetImportTabAi() => importTab = "ai";
+    private void SetImportTabExcel() => importTab = "excel";
+    private void ViewCategories() => Go("categories");
+    private void ViewUsers() => Go("users");
+    private void ViewLlm() => Go("llm");
+
+    private sealed class LinkDraft
+    {
+        public string Title { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string LinkType { get; set; } = "";
+        public string GroupName { get; set; } = "";
+        public string ExtractCode { get; set; } = "";
+        public string ExpireAt { get; set; } = "";
+        public string Platform { get; set; } = "";
+        public string Version { get; set; } = "";
+        public string Remark { get; set; } = "";
+        public string TagsText { get; set; } = "";
+        public List<string> Tags => ParseTags(TagsText);
+    }
+
+    private static List<string> ParseTags(string? text) =>
+        (text ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    private static string NormalizeMulti(string? text) =>
+        string.Join(", ", ParseTags(text).Distinct(StringComparer.Ordinal));
+
+    private List<string> GetCategoryValues(string kind) => kind switch
+    {
+        "group" => categoryGroups,
+        "platform" => categoryPlatforms,
+        "type" => categoryLinkTypes,
+        _ => categoryTags
+    };
+
+    private async Task LoadCategories()
+    {
+        var options = await Api.Categories();
+        categoryGroups = options.Groups;
+        categoryPlatforms = options.Platforms;
+        categoryTags = options.Tags;
+        categoryLinkTypes = options.LinkTypes;
+    }
+
+    private void AddLinkDraft()
+    {
+        var previous = linkDrafts.LastOrDefault();
+        linkDrafts.Add(previous is null ? new LinkDraft() : new LinkDraft
+        {
+            Title = previous.Title, Url = previous.Url, GroupName = previous.GroupName,
+            Platform = previous.Platform, Remark = previous.Remark, TagsText = previous.TagsText
+        });
+    }
+
+    private void DuplicateLinkDraft(int index)
+    {
+        if (index < 0 || index >= linkDrafts.Count) return;
+        var source = linkDrafts[index];
+        linkDrafts.Insert(index + 1, new LinkDraft
+        {
+            Title = source.Title, Url = source.Url, GroupName = source.GroupName,
+            Platform = source.Platform, LinkType = source.LinkType, ExtractCode = source.ExtractCode,
+            ExpireAt = source.ExpireAt, Version = source.Version, Remark = source.Remark, TagsText = source.TagsText
+        });
+    }
+
+    private void RemoveLinkDraft(int index)
+    {
+        if (linkDrafts.Count > 1 && index >= 0 && index < linkDrafts.Count) linkDrafts.RemoveAt(index);
+    }
+
+    private async Task AddCategory(string kind)
+    {
+        categoryMsg = ""; categoryErr = false;
+        var name = categoryNewName[kind].Trim();
+        var (ok, msg) = await Api.CreateCategory(kind, name);
+        if (!ok) { categoryMsg = msg ?? "保存失败"; categoryErr = true; return; }
+        categoryNewName[kind] = "";
+        await LoadCategories();
+    }
+
+    private async Task RenameCategory(string kind, string oldName, string newName)
+    {
+        categoryMsg = ""; categoryErr = false;
+        var (ok, msg) = await Api.RenameCategory(kind, oldName, newName);
+        if (!ok) { categoryMsg = msg ?? "重命名失败"; categoryErr = true; return; }
+        await LoadCategories();
+    }
+
+    private async Task DeleteCategory(string kind, string name)
+    {
+        categoryMsg = ""; categoryErr = false;
+        var (ok, msg) = await Api.DeleteCategory(kind, name);
+        if (!ok) { categoryMsg = msg ?? "删除失败"; categoryErr = true; return; }
+        await LoadCategories();
+    }
+
+    private void RenameCategoryPrompt(string kind, string name)
+    {
+        askKind = "rename";
+        askTitle = I18n.Lang == "zh" ? "重命名" : "Rename";
+        askMessage = I18n.Lang == "zh" ? $"将「{name}」重命名为：" : $"Rename \"{name}\" to:";
+        askValue = name;
+        askAction = v => RenameCategory(kind, name, v);
+        askOpen = true;
+    }
+
+    private void DeleteCategoryConfirm(string kind, string name)
+    {
+        askKind = "delete";
+        askTitle = I18n.Lang == "zh" ? "删除分类" : "Delete option";
+        askMessage = I18n.Lang == "zh" ? $"确定删除「{name}」？仍被链接使用的项无法删除。" : $"Delete \"{name}\"? Options still in use cannot be deleted.";
+        askValue = "";
+        askAction = _ => DeleteCategory(kind, name);
+        askOpen = true;
+    }
+
+    private void DeleteSelectedCategoriesConfirm()
+    {
+        var count = CategorySelectedCount;
+        askKind = "delete";
+        askTitle = I18n.Lang == "zh" ? "批量删除分类" : "Delete selected options";
+        askMessage = I18n.Lang == "zh"
+            ? $"确定删除已勾选的 {count} 项？仍被链接使用的项会跳过。"
+            : $"Delete {count} selected options? Options still in use will be skipped.";
+        askValue = "";
+        askAction = _ => DeleteSelectedCategories();
+        askOpen = true;
+    }
+
+    private async Task DeleteSelectedCategories()
+    {
+        categoryMsg = ""; categoryErr = false;
+        var selected = categorySelected.ToDictionary(x => x.Key, x => x.Value.ToList());
+        var deleted = 0; var skipped = 0;
+        foreach (var (kind, names) in selected)
+        {
+            if (names.Count == 0) continue;
+            var (result, msg) = await Api.BatchDeleteCategory(kind, names);
+            if (result is null) { categoryMsg = msg ?? "批量删除失败"; categoryErr = true; continue; }
+            deleted += result.Deleted.Count;
+            skipped += result.Skipped.Count;
+            var set = CategorySelection(kind);
+            foreach (var name in result.Deleted) set.Remove(name);
+        }
+        await LoadCategories();
+        categoryMsg = I18n.Lang == "zh"
+            ? $"已删除 {deleted} 项" + (skipped > 0 ? $"，跳过 {skipped} 项（仍被链接使用或不存在）" : "")
+            : $"Deleted {deleted} options" + (skipped > 0 ? $", skipped {skipped} (in use or missing)" : "");
+    }
+
+    private void CloseAsk() { askOpen = false; askAction = null; }
+
+    private async Task ConfirmAsk()
+    {
+        if (askBusy || askAction is null) return;
+        var value = askKind == "rename" ? askValue.Trim() : askValue;
+        if (askKind == "rename" && string.IsNullOrWhiteSpace(value)) return;
+        askBusy = true;
+        try { await askAction(value); CloseAsk(); }
+        finally { askBusy = false; }
+    }
+
+    private async Task OnAskKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ConfirmAsk();
+        else if (e.Key == "Escape") CloseAsk();
+    }
+
+    private void ViewAccount() => Go("account");
+
+    private async Task StartMfaSetup()
+    {
+        mfaBusy = true; mfaMsg = ""; mfaErr = false;
+        try
+        {
+            mfaSetup = await Api.SetupMfa();
+            if (mfaSetup is null) { mfaMsg = I18n.Lang=="zh"?"生成密钥失败":"Failed to generate secret"; mfaErr = true; }
+        }
+        finally { mfaBusy = false; }
+    }
+
+    private void CancelMfaSetup()
+    {
+        mfaSetup = null; mfaCode = ""; mfaMsg = "";
+    }
+
+    private async Task ConfirmMfa()
+    {
+        if (string.IsNullOrWhiteSpace(mfaCode)) return;
+        mfaBusy = true; mfaMsg = ""; mfaErr = false;
+        try
+        {
+            var (ok, msg) = await Api.VerifyMfa(mfaCode.Trim());
+            if (ok)
+            {
+                myMfaEnabled = true; mfaSetup = null; mfaCode = "";
+                mfaMsg = I18n.Lang=="zh" ? "MFA 已开启，下次登录需输入动态码" : "MFA enabled. A code will be required at next sign-in.";
+            }
+            else { mfaMsg = msg == "动态码错误" ? (I18n.Lang=="zh"?"动态码错误":"Invalid code") : (I18n.Lang=="zh"?"操作失败":"Failed"); mfaErr = true; }
+        }
+        finally { mfaBusy = false; }
+    }
+
+    private async Task DisableMfaNow()
+    {
+        if (string.IsNullOrWhiteSpace(mfaCode)) { mfaMsg = I18n.Lang=="zh"?"请输入当前动态码":"Enter current code"; mfaErr = true; return; }
+        mfaBusy = true; mfaMsg = ""; mfaErr = false;
+        try
+        {
+            var (ok, msg) = await Api.DisableMfa(mfaCode.Trim(), null);
+            if (ok) { myMfaEnabled = false; mfaCode = ""; mfaMsg = I18n.Lang=="zh"?"MFA 已关闭":"MFA disabled"; }
+            else { mfaMsg = I18n.Lang=="zh" ? (msg ?? "动态码错误") : "Invalid code"; mfaErr = true; }
+        }
+        finally { mfaBusy = false; }
+    }
+
+    private async Task OnExportKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await DoExportPackage();
+    }
+
+    private async Task DoExportPackage()
+    {
+        if (string.IsNullOrWhiteSpace(exportPwd))
+        {
+            exportPkgMsg = I18n.Lang == "zh" ? "请输入当前账号密码" : "Enter your password";
+            exportPkgErr = true; return;
+        }
+        exportPkgBusy = true; exportPkgMsg = null; exportPkgErr = false;
+        try
+        {
+            var err = await JS.InvokeAsync<string>("durlinksDownloadAuthedPost",
+                "/api/admin/export/package", new { password = exportPwd }, "durlinks-demo-export.zip");
+            if (string.IsNullOrEmpty(err))
+            {
+                exportPkgMsg = I18n.Lang == "zh" ? "已生成，下载已开始" : "Package generated; download started";
+                exportPkgErr = false;
+                exportPwd = "";
+            }
+            else
+            {
+                exportPkgMsg = err;
+                exportPkgErr = true;
+            }
+        }
+        finally { exportPkgBusy = false; }
+    }
+
+    /// <summary>下载导入模板：接口需要 Bearer 令牌，不能直接用 &lt;a href&gt;（会 401）。</summary>
+    private async Task DownloadTemplate()
+    {
+        try
+        {
+            var err = await JS.InvokeAsync<string>("durlinksDownloadAuthed",
+                "/api/admin/import/template", "导入模板.xlsx");
+            if (!string.IsNullOrEmpty(err)) { importMsg = (I18n.Lang == "zh" ? "模板下载失败：" : "Template download failed: ") + err; importErr = true; }
+            else { importMsg = null; importErr = false; }
+        }
+        catch (Exception ex)
+        {
+            importMsg = (I18n.Lang == "zh" ? "模板下载失败：" : "Template download failed: ") + ex.Message;
+            importErr = true;
+        }
+    }
+
+    private async Task DoChangePassword()
+    {
+        pwdMsg = ""; pwdErr = false;
+        if (string.IsNullOrWhiteSpace(oldPwd) || string.IsNullOrWhiteSpace(newPwd2)) { pwdMsg = I18n.Lang=="zh"?"请填写完整":"Fill in all fields"; pwdErr = true; return; }
+        if (newPwd2 != newPwd3) { pwdMsg = I18n.Lang=="zh"?"两次新密码不一致":"Passwords do not match"; pwdErr = true; return; }
+        if (newPwd2.Length < 8) { pwdMsg = I18n.Lang=="zh"?"新密码至少 8 位":"At least 8 characters"; pwdErr = true; return; }
+        pwdBusy = true;
+        try
+        {
+            var (ok, msg) = await Api.ChangePassword(oldPwd, newPwd2);
+            if (ok) { oldPwd = newPwd2 = newPwd3 = ""; pwdMsg = I18n.Lang=="zh"?"密码已修改":"Password changed"; }
+            else { pwdMsg = I18n.Lang=="zh" ? (msg ?? "修改失败") : "Failed"; pwdErr = true; }
+        }
+        finally { pwdBusy = false; }
+    }
+
+    private async Task CopyText(string text)
+    {
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); }
+        catch { }
+    }
+
+    private void TabLinks() => view = "links";
+    private void Toggle(int id) { if (!selected.Add(id)) selected.Remove(id); }
+    private void ToggleAllLinks(bool on)
+    {
+        foreach (var l in links) { if (on) selected.Add(l.Id); else selected.Remove(l.Id); }
+    }
+    private async Task Hide(LinkDto l) { await Api.SetHidden(l.Id, !l.IsHidden); await LoadLinks(); await LoadStats(); }
+    private async Task Del(LinkDto l) { await Api.SoftDelete(l.Id); await LoadLinks(); await LoadStats(); }
+    private async Task BatchHide(bool h) { await Api.BatchHidden([.. selected], h); selected.Clear(); await LoadLinks(); await LoadStats(); }
+    private async Task BatchDel() { await Api.BatchDelete([.. selected]); selected.Clear(); await LoadLinks(); await LoadStats(); }
+    private async Task Enrich(LinkDto l) { await Api.Enrich(l.Id); await LoadLinks(); }
+
+    // ---- 批量 AI 补料 / 导出 ----
+    private async Task StartBatch()
+    {
+        try
+        {
+            // 前端先钳制：空值/0/负数一律按 100，避免误触大批量消耗额度
+            var limit = enrichLimit <= 0 ? 100 : Math.Min(enrichLimit, 100000);
+            enrichLimit = limit;
+            var (ok, msg) = await Api.StartBatchEnrich(new BatchEnrichRequest
+            {
+                Mode = enrichMode, Limit = limit, Concurrency = 3,
+                LibraryId = currentLibId ?? 0
+            });
+            enrichStatus = await Api.GetBatchEnrichStatus();
+            if (!ok) return; // 已在运行等冲突场景，仅刷新状态
+            StartEnrichPolling();
+        }
+        catch { enrichStatus = await Api.GetBatchEnrichStatus(); }
+    }
+
+    /// <summary>启动进度轮询；重复调用会先释放旧 Timer。</summary>
+    private void StartEnrichPolling()
+    {
+        enrichTimer?.Dispose();
+        importTimer?.Dispose();
+        enrichTimer = new System.Threading.Timer(async _ =>
+        {
+            var s = await Api.GetBatchEnrichStatus();
+            await InvokeAsync(() => { enrichStatus = s; StateHasChanged(); });
+            if (s == null || !s.Running)
+            {
+                enrichTimer?.Dispose();
+                enrichTimer = null;
+                await InvokeAsync(async () => { await LoadLinks(); await LoadStats(); });
+            }
+        }, null, 1500, 1500);
+    }
+
+    private async Task CancelBatch()
+    {
+        await Api.CancelBatchEnrich();
+        enrichStatus = await Api.GetBatchEnrichStatus();
+    }
+
+    private async Task ExportLinks()
+    {
+        exporting = true;
+        exportMsg = "";
+        try
+        {
+            // 浏览器直连带鉴权 fetch 下载：文件不经过 .NET 内存，也不做 base64 膨胀
+            var lib = currentLibId ?? 0;
+            var url = lib > 0 ? $"/api/admin/ai/enrich/export?libraryId={lib}" : "/api/admin/ai/enrich/export";
+            var err = await JS.InvokeAsync<string>("durlinksDownloadAuthed", url, "链接导出.xlsx");
+            if (!string.IsNullOrEmpty(err))
+                exportMsg = (I18n.Lang == "zh" ? "导出失败：" : "Export failed: ") + err;
+        }
+        catch (Exception ex) { exportMsg = ex.Message; }
+        finally { exporting = false; }
+    }
+
+    private async Task DoParseLinks()
+    {
+        if (string.IsNullOrWhiteSpace(pasteText))
+        {
+            importMsg = I18n.Lang == "zh" ? "请先粘贴链接" : "Paste some links first";
+            importErr = true; return;
+        }
+        parseBusy = true; importMsg = null; importErr = false;
+        try
+        {
+            parseJson = await Api.ParseLinks(pasteText);
+            if (parseJson is null)
+            {
+                importMsg = I18n.Lang == "zh" ? "识别失败（LLM 可能未配置）" : "Recognition failed (LLM not configured)";
+                importErr = true;
+            }
+        }
+        finally { parseBusy = false; }
+    }
+
+    private async Task DoImportLinks()
+    {
+        if (currentLibId is null)
+        {
+            importMsg = I18n.Lang == "zh" ? "请先在左侧选择发布库" : "Select a library first";
+            importErr = true; return;
+        }
+        var lines = pasteText.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (lines.Length == 0)
+        {
+            importMsg = I18n.Lang == "zh" ? "没有可导入的链接" : "Nothing to import";
+            importErr = true; return;
+        }
+        importBusy = true; importMsg = null;
+        try
+        {
+            var items = lines.Select(t => new { rawText = t, title = (string?)null, linkType = (string?)null,
+                groupName = (string?)null, platform = (string?)null, tags = new List<string>(), summary = (string?)null, recognized = false }).ToList();
+            var (ok, body) = await Api.ImportLinksRaw(items, currentLibId);
+            var (count, err) = ReadImportResult(ok, body);
+            if (count is null)
+            {
+                importMsg = err ?? (I18n.Lang == "zh" ? "导入失败" : "Import failed");
+                importErr = true; return;
+            }
+            importErr = false;
+            importMsg = I18n.Lang == "zh"
+                ? $"已导入 {count} 条到「{currentLibName}」"
+                : $"Imported {count} link(s) into \"{currentLibName}\"";
+            pasteText = ""; parseJson = null;
+            await LoadLinks(); await LoadLibraries(); await LoadStats();
+        }
+        finally { importBusy = false; }
+    }
+
+    private void OnExcelFile(InputFileChangeEventArgs e) { excelFile = e.File; importMsg = null; importErr = false; }
+
+    private async Task DoImportExcel()
+    {
+        if (excelFile is null)
+        {
+            importMsg = I18n.Lang == "zh" ? "请先选择文件" : "Select a file first";
+            importErr = true; return;
+        }
+        if (currentLibId is null)
+        {
+            importMsg = I18n.Lang == "zh" ? "请先在左侧选择发布库" : "Select a library first";
+            importErr = true; return;
+        }
+        importBusy = true; importMsg = null; importErr = false;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            // 单文件上限与服务端一致（50MB）；真正的内存控制靠服务端流式解析
+            content.Add(new StreamContent(excelFile.OpenReadStream(50L * 1024 * 1024)), "file", excelFile.Name);
+            var (ok, body) = await Api.StartExcelImport(content, currentLibId);
+            if (!ok)
+            {
+                importMsg = ReadMessage(body) ?? (I18n.Lang == "zh" ? "启动导入失败" : "Failed to start import");
+                importErr = true; return;
+            }
+            excelFile = null;
+            importStatus = await Api.ExcelImportStatus();
+            StartImportPolling();
+        }
+        finally { importBusy = false; }
+    }
+
+    /// <summary>轮询后台导入进度；完成后刷新列表并停表。</summary>
+    private void StartImportPolling()
+    {
+        importTimer?.Dispose();
+        importTimer = new Timer(async _ => await PollImportAsync(), null, 0, 800);
+    }
+
+    private async Task PollImportAsync()
+    {
+        if (importPolling) return;   // 防止上一次未完成时重入
+        importPolling = true;
+        try
+        {
+            var st = await Api.ExcelImportStatus();
+            if (st is null) return;
+            await InvokeAsync(() => { importStatus = st; StateHasChanged(); });
+            if (st.Running) return;
+
+            importTimer?.Dispose(); importTimer = null;
+            await InvokeAsync(async () =>
+            {
+                importMsg = st.Message;
+                importErr = st.Imported == 0 && st.Failed > 0;
+                await LoadLinks(); await LoadLibraries(); await LoadStats();
+                StateHasChanged();
+            });
+        }
+        finally { importPolling = false; }
+    }
+
+    private async Task CancelExcelImport()
+    {
+        await Api.CancelExcelImport();
+        importMsg = I18n.Lang == "zh" ? "已请求取消，当前批次处理完即停止…" : "Cancelling after current batch…";
+        await PollImportAsync();
+    }
+
+    private static string? ReadMessage(string body)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("message", out var m)) return m.GetString();
+            if (doc.RootElement.TryGetProperty("status", out var st)
+                && st.TryGetProperty("message", out var sm)) return sm.GetString();
+        }
+        catch { }
+        return body.Length > 200 ? body[..200] : null;
+    }
+
+    /// <summary>导入接口统一返回 { imported } 或 { message }，这里做一次安全解析。</summary>
+    private static (int? imported, string? message) ReadImportResult(bool ok, string body)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("imported", out var n) && n.ValueKind == System.Text.Json.JsonValueKind.Number)
+                return (n.GetInt32(), null);
+            if (root.TryGetProperty("message", out var m) && m.ValueKind == System.Text.Json.JsonValueKind.String)
+                return (null, m.GetString());
+        }
+        catch { /* 非 JSON，走下面的兜底 */ }
+        return (null, ok ? null : (body.Length > 200 ? body[..200] : body));
+    }
+    private async Task DoCreateUser() { await Api.CreateUser(newUser, newPwd); newUser=""; newPwd=""; users = await Api.Users() ?? []; }
+    // ---- 多提供商（模型服务） ----
+    private void OpenProviderForm()
+    {
+        pfId = 0; pfName = ""; pfProtocol = "openai"; pfEndpoint = ""; pfKey = ""; pfModel = "";
+        pfModels = []; pfNewModel = ""; pfFetched = []; pfModelsMsg = null;
+        pfRetryPolicy = "default"; pfMaxRetries = 8; ApplyRetryOn(null);
+        pfDefault = llmConfigs.Count == 0; pfHasKey = false; pfKeyMask = ""; pfMsg = null;
+        pfTestMsg = null; llmTestMsg = ""; providerFormOpen = true;
+    }
+
+    private void EditProvider(LlmConfigDto c)
+    {
+        pfId = c.Id; pfName = c.Name; pfProtocol = string.IsNullOrEmpty(c.Protocol) ? "openai" : c.Protocol;
+        pfEndpoint = c.ApiEndpoint; pfModel = c.Model;
+        pfModels = ModelList(c); pfNewModel = ""; pfFetched = []; pfModelsMsg = null;
+        pfRetryPolicy = string.IsNullOrWhiteSpace(c.RetryPolicy) ? "default" : c.RetryPolicy;
+        pfMaxRetries = c.MaxRetries;
+        ApplyRetryOn(c.RetryOn);
+        pfKey = "";
+        pfHasKey = c.HasApiKey; pfKeyMask = c.ApiKey; pfDefault = c.IsDefault; pfMsg = null;
+        pfTestMsg = null; llmTestMsg = ""; providerFormOpen = true;
+    }
+
+    private void CloseProviderForm() => providerFormOpen = false;
+
+    /// <summary>站点的模型清单；老数据只有 Model 时退化为单模型。</summary>
+    private static List<string> ModelList(LlmConfigDto c) =>
+        c.Models is { Count: > 0 } ? c.Models
+        : string.IsNullOrWhiteSpace(c.Model) ? [] : [c.Model];
+
+    private void AddPfModel()
+    {
+        var v = (pfNewModel ?? "").Trim();
+        if (v.Length == 0) return;
+        if (v.Length > 120) v = v[..120];
+        if (!pfModels.Contains(v, StringComparer.OrdinalIgnoreCase)) pfModels.Add(v);
+        pfModel = pfModels.First(m => string.Equals(m, v, StringComparison.OrdinalIgnoreCase)); // 新加的自动设为当前
+        pfNewModel = "";
+    }
+
+    private void OnPfModelKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddPfModel();
+    }
+
+    private void RemovePfModel(string m)
+    {
+        pfModels.RemoveAll(x => string.Equals(x, m, StringComparison.OrdinalIgnoreCase));
+        if (string.Equals(pfModel, m, StringComparison.OrdinalIgnoreCase))
+            pfModel = pfModels.FirstOrDefault() ?? "";
+    }
+
+    /// <summary>勾选项 → 协议错误类型键。</summary>
+    private List<string> CurrentRetryOn()
+    {
+        var list = new List<string>();
+        if (pfRetryEmpty) list.Add("empty");
+        if (pfRetryFormat) list.Add("format");
+        if (pfRetryQuota) list.Add("quota");
+        if (pfRetryRateLimit) list.Add("rate_limit");
+        if (pfRetryServer) list.Add("server");
+        if (pfRetryStreamEnd) list.Add("stream_end");
+        if (pfRetryTimeout) list.Add("timeout");
+        if (pfRetryNetwork) list.Add("network");
+        return list;
+    }
+
+    private void ApplyRetryOn(List<string>? items)
+    {
+        var set = new HashSet<string>(items ?? [], StringComparer.OrdinalIgnoreCase);
+        // 老配置没有该字段时按内置临时错误集合展示
+        if (set.Count == 0) set = new HashSet<string>(["empty", "rate_limit", "server", "timeout", "network"], StringComparer.OrdinalIgnoreCase);
+        pfRetryEmpty = set.Contains("empty");
+        pfRetryFormat = set.Contains("format");
+        pfRetryQuota = set.Contains("quota");
+        pfRetryRateLimit = set.Contains("rate_limit");
+        pfRetryServer = set.Contains("server");
+        pfRetryStreamEnd = set.Contains("stream_end");
+        pfRetryTimeout = set.Contains("timeout");
+        pfRetryNetwork = set.Contains("network");
+    }
+
+    /// <summary>按当前表单（地址/密钥/协议）拉取站点可用模型；密钥留空时后端回退到已保存的。</summary>
+    private async Task FetchProviderModels()
+    {
+        if (string.IsNullOrWhiteSpace(pfEndpoint))
+        {
+            pfModelsMsg = I18n.Lang == "zh" ? "请先填写 Base URL" : "Enter the base URL first";
+            pfModelsErr = true; return;
+        }
+        pfFetchingModels = true; pfModelsMsg = null; pfModelsErr = false; pfFetched = [];
+        try
+        {
+            var res = await Api.ListLlmModels(new LlmConfigDto
+            {
+                Id = pfId, Protocol = pfProtocol, ApiEndpoint = pfEndpoint, ApiKey = pfKey
+            });
+            if (res is null) { pfModelsMsg = I18n.Lang == "zh" ? "获取失败" : "Failed"; pfModelsErr = true; return; }
+            pfFetched = res.Models;
+            pfModelsErr = !res.Ok;
+            pfModelsMsg = res.Ok
+                ? (I18n.Lang == "zh" ? $"{res.Message}，点击条目加入清单" : $"{res.Message}. Click to add.")
+                : res.Message;
+        }
+        finally { pfFetchingModels = false; }
+    }
+
+    private bool IsFetchedAdded(string id) =>
+        pfModels.Any(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
+
+    private void AddFetchedModel(string id)
+    {
+        if (!IsFetchedAdded(id)) pfModels.Add(id);
+        if (string.IsNullOrWhiteSpace(pfModel)) pfModel = id;
+    }
+
+    private void AddAllFetchedModels()
+    {
+        foreach (var m in pfFetched) AddFetchedModel(m.Id);
+        pfModelsErr = false;
+        pfModelsMsg = I18n.Lang == "zh" ? $"已添加 {pfFetched.Count} 个模型" : $"Added {pfFetched.Count} models";
+    }
+
+    private void SetPfActive(string m) => pfModel = m;
+
+    /// <summary>卡片上直接切换站点当前使用的模型（无需打开编辑框）。</summary>
+    private async Task SwitchModel(LlmConfigDto c, string m)
+    {
+        if (string.Equals(c.Model, m, StringComparison.OrdinalIgnoreCase)) return;
+        var (ok, msg) = await Api.SetLlmModel(c.Id, m);
+        if (!ok)
+        {
+            llmMsg = I18n.Lang == "zh" ? "切换失败：" + msg : "Switch failed: " + msg;
+            return;
+        }
+        llmConfigs = await Api.ListLlmConfigs();
+        llmMsg = I18n.Lang == "zh" ? $"「{c.Name}」当前模型已切换为 {m}" : $"\"{c.Name}\" now uses {m}";
+    }
+
+    private async Task SaveProvider()
+    {
+        if (pfModels.Count == 0 && !string.IsNullOrWhiteSpace(pfNewModel)) AddPfModel();
+        if (string.IsNullOrWhiteSpace(pfEndpoint) || pfModels.Count == 0)
+        {
+            pfMsg = I18n.Lang == "zh" ? "请填写 Base URL，并至少添加一个模型" : "Base URL and at least one model are required";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(pfModel)) pfModel = pfModels[0];
+        pfBusy = true; pfMsg = null;
+        try
+        {
+            var (ok, _) = await Api.SaveLlmConfig(new LlmConfigDto
+            {
+                Id = pfId, Name = pfName, Protocol = pfProtocol,
+                ApiEndpoint = pfEndpoint, ApiKey = pfKey, Model = pfModel, Models = [.. pfModels],
+                RetryPolicy = pfRetryPolicy, MaxRetries = pfMaxRetries, RetryOn = CurrentRetryOn(),
+                IsDefault = pfDefault
+            });
+            if (!ok) { pfMsg = I18n.Lang == "zh" ? "保存失败" : "Save failed"; return; }
+            providerFormOpen = false;
+            llmConfigs = await Api.ListLlmConfigs();
+            llmMsg = I18n.Lang == "zh" ? "已保存" : "Saved";
+        }
+        finally { pfBusy = false; }
+    }
+
+    private void DeleteProvider(LlmConfigDto c)
+    {
+        askKind = "delete";
+        askTitle = I18n.Lang == "zh" ? "删除模型站点" : "Delete provider";
+        askMessage = I18n.Lang == "zh" ? $"确定删除「{c.Name}」？" : $"Delete \"{c.Name}\"?";
+        askValue = "";
+        askAction = async _ => { await Api.DeleteLlmConfig(c.Id); llmConfigs = await Api.ListLlmConfigs(); };
+        askOpen = true;
+    }
+
+    private async Task MakeDefault(LlmConfigDto c)
+    {
+        await Api.SetDefaultLlmConfig(c.Id);
+        llmConfigs = await Api.ListLlmConfigs();
+        llmMsg = I18n.Lang == "zh" ? $"已将「{c.Name}」设为默认" : $"\"{c.Name}\" is now default";
+    }
+
+    private async Task TestProvider(LlmConfigDto c)
+    {
+        llmTesting = true; llmTestMsg = "";
+        try
+        {
+            var (ok, msg, ms) = await Api.TestLlm(new LlmConfigDto
+            {
+                Id = c.Id, Protocol = c.Protocol, ApiEndpoint = c.ApiEndpoint,
+                ApiKey = c.ApiKey, Model = c.Model
+            });
+            llmTestOk = ok; llmTestMsg = msg; llmTestMs = ms;
+        }
+        finally { llmTesting = false; }
+    }
+
+    private async Task DoTestProvider()
+    {
+        llmTesting = true; pfTestMsg = null;
+        try
+        {
+            var (ok, msg, ms) = await Api.TestLlm(new LlmConfigDto
+            {
+                Id = pfId, Protocol = pfProtocol, ApiEndpoint = pfEndpoint,
+                ApiKey = pfKey, Model = pfModel,
+                RetryPolicy = pfRetryPolicy, MaxRetries = pfMaxRetries, RetryOn = CurrentRetryOn()
+            });
+            pfTestOk = ok; pfTestMsg = msg; pfTestMs = ms;
+        }
+        finally { llmTesting = false; }
+    }
+
+    private void ApplyProviderPreset(ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString() ?? "";
+        switch (v)
+        {
+            case "openai":
+                pfName = "OpenAI"; pfProtocol = "openai";
+                pfEndpoint = "https://api.openai.com/v1";
+                pfModels = ["gpt-4o-mini", "gpt-4o"]; pfModel = "gpt-4o-mini"; break;
+            case "anthropic":
+                pfName = "Anthropic"; pfProtocol = "anthropic";
+                pfEndpoint = "https://api.anthropic.com";
+                pfModels = ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"]; pfModel = "claude-3-5-sonnet-latest"; break;
+            case "gemini":
+                pfName = "Gemini"; pfProtocol = "gemini";
+                pfEndpoint = "https://generativelanguage.googleapis.com";
+                pfModels = ["gemini-1.5-flash", "gemini-1.5-pro"]; pfModel = "gemini-1.5-flash"; break;
+            case "deepseek":
+                pfName = "DeepSeek"; pfProtocol = "openai";
+                pfEndpoint = "https://api.deepseek.com/v1";
+                pfModels = ["deepseek-chat", "deepseek-reasoner"]; pfModel = "deepseek-chat"; break;
+            case "qwen":
+                pfName = "通义千问"; pfProtocol = "openai";
+                pfEndpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+                pfModels = ["qwen-plus", "qwen-turbo", "qwen-max"]; pfModel = "qwen-plus"; break;
+            case "moonshot":
+                pfName = "Kimi 月之暗面"; pfProtocol = "openai";
+                pfEndpoint = "https://api.moonshot.cn/v1";
+                pfModels = ["moonshot-v1-8k", "moonshot-v1-32k"]; pfModel = "moonshot-v1-8k"; break;
+            case "zhipu":
+                pfName = "智谱 GLM"; pfProtocol = "openai";
+                pfEndpoint = "https://open.bigmodel.cn/api/paas/v4";
+                pfModels = ["glm-4-flash", "glm-4-plus"]; pfModel = "glm-4-flash"; break;
+            case "siliconflow":
+                pfName = "硅基流动"; pfProtocol = "openai";
+                pfEndpoint = "https://api.siliconflow.cn/v1";
+                pfModels = ["Qwen/Qwen2.5-7B-Instruct"]; pfModel = "Qwen/Qwen2.5-7B-Instruct"; break;
+        }
+        pfNewModel = "";
+    }
+
+    public void Dispose()
+    {
+        I18n.OnChange -= StateHasChanged;
+        enrichTimer?.Dispose();
+    }
+}

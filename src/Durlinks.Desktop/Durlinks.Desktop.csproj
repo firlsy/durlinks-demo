@@ -1,0 +1,50 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!--
+    发布体积优化（仅 Release）：单文件 + 压缩 + partial 裁剪
+    · partial 只裁标注 IsTrimmable 的框架程序集，本程序集与 Durlinks.Shared 不裁，反射绑定与 DTO 得以保留
+    · 裁剪会默认关闭 STJ 反射序列化，这里显式打开，否则 GetFromJsonAsync 会在运行时抛异常
+    · 不写死 RuntimeIdentifier，win-x64 / osx-arm64 等由命令行 -r 决定
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <UseAppHost>true</UseAppHost>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+    <!-- SkiaSharp / HarfBuzz 包自带 80MB+ pdb，不需要随包发布 -->
+    <AllowedReferenceRelatedFileExtensions>.xml</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.6" />
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3">
+      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Durlinks.Shared\Durlinks.Shared.csproj" />
+  </ItemGroup>
+
+  <!-- 与网页版一致的图标，作为 Avalonia 资源嵌入（品牌栏 logo + 窗口图标） -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\favicon.png" />
+    <AvaloniaResource Include="Assets\icon-192.png" />
+  </ItemGroup>
+</Project>

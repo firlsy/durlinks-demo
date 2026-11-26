@@ -1,0 +1,13 @@
+{
+  ".url": {
+    "durlinks.Application": {
+      "title": "Durlinks 链接仓库",
+      "icon": "images/icon_{0}.png",
+      "type": "url",
+      "protocol": "",
+      "port": "8789",
+      "url": "/",
+      "allUsers": false
+    }
+  }
+}
