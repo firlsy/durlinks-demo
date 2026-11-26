@@ -26,6 +26,7 @@ type App struct {
 	loginGuard *loginLimiter
 	cfg        *Config
 	baseDir    string
+	webMode    string
 	userSite   string
 	adminSite  string
 	publicPort int
@@ -113,6 +114,7 @@ func main() {
 		captcha:    NewCaptchaStore(),
 		loginGuard: newLoginLimiter(),
 		cfg:        cfg,
+		webMode:    cfg.Web.Mode,
 		baseDir:    base,
 		userSite:   ResolvePath(base, cfg.StaticFiles.UserDir),
 		adminSite:  ResolvePath(base, cfg.StaticFiles.AdminDir),
@@ -398,9 +400,21 @@ func (a *App) staticHandler(root string, isPublic bool) http.Handler {
 func (a *App) publicHandler() http.Handler {
 	mux := a.apiRoutes(false)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(strings.ToLower(r.URL.Path), "/api") {
+		path := r.URL.Path
+		if strings.HasPrefix(strings.ToLower(path), "/api") {
 			mux.ServeHTTP(w, r)
 			return
+		}
+		// go 模式：用户端由 Go 直接渲染，不依赖任何前端产物
+		if a.webMode == "go" {
+			switch {
+			case path == "/" || path == "/index.html":
+				a.handleWebIndex(w, r)
+				return
+			case strings.HasPrefix(path, "/assets/"):
+				a.handleWebAssets(w, r)
+				return
+			}
 		}
 		a.staticHandler(a.userSite, true).ServeHTTP(w, r)
 	})

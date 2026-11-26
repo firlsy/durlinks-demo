@@ -23,12 +23,11 @@ func (a *App) handlePublicLinks(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, PagedResult{Items: items, Total: total, Page: page, PageSize: size, TotalPages: totalPages})
 }
 
-// handleFilters GET /api/filters?channel=web|client
-func (a *App) handleFilters(w http.ResponseWriter, r *http.Request) {
-	channel := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("channel")))
+// publicFilterOptions 汇总可见链接的分组/标签/平台（API 与服务端渲染共用）。
+func (a *App) publicFilterOptions(channel string) (FilterOptionsDto, error) {
 	visCond := `l."IsHidden" = ` + a.db.False() + ` AND l."IsDeleted" = ` + a.db.False() +
 		` AND lib."Id" IS NOT NULL AND lib."IsDeleted" = ` + a.db.False()
-	if channel == "client" {
+	if strings.EqualFold(channel, "client") {
 		visCond += ` AND lib."VisibleOnClient" = ` + a.db.True()
 	} else {
 		visCond += ` AND lib."VisibleOnWeb" = ` + a.db.True()
@@ -39,8 +38,7 @@ func (a *App) handleFilters(w http.ResponseWriter, r *http.Request) {
 	rows, err := a.db.sql.Query(`SELECT l."GroupName", COALESCE(l."Platform",'') FROM "Links" l
 		JOIN "PublishLibraries" lib ON lib."Id" = l."LibraryId" WHERE ` + visCond)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+		return FilterOptionsDto{}, err
 	}
 	for rows.Next() {
 		var g, p string
@@ -75,11 +73,22 @@ func (a *App) handleFilters(w http.ResponseWriter, r *http.Request) {
 		tagRows.Close()
 	}
 
-	writeOK(w, FilterOptionsDto{
+	return FilterOptionsDto{
 		Groups:    sortedKeys(groupSet),
 		Tags:      sortedKeys(tagSet),
 		Platforms: sortedKeys(platformSet),
-	})
+	}, nil
+}
+
+// handleFilters GET /api/filters?channel=web|client
+func (a *App) handleFilters(w http.ResponseWriter, r *http.Request) {
+	channel := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("channel")))
+	out, err := a.publicFilterOptions(channel)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeOK(w, out)
 }
 
 func sortedKeys(m map[string]bool) []string {

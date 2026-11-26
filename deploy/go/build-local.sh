@@ -18,7 +18,7 @@ if [ -f "$ROOT/src/Durlinks.Server/templates/导入模板.xlsx" ]; then
     cp -f "$ROOT/src/Durlinks.Server/templates/导入模板.xlsx" "$OUT/templates/导入模板.xlsx"
 fi
 
-echo "==> 复制静态站（源码 wwwroot，仅供登录页调试；正式请用 dotnet publish 产物）"
+echo "==> 复制静态站（用户端由 Go 直出，此目录仅 Web.Mode=static 回退时使用）"
 cp -rf "$ROOT/src/Durlinks.AdminWeb/wwwroot/." "$OUT/wwwroot-admin/" 2>/dev/null || true
 if [ -f "$ROOT/src/Durlinks.AdminWeb/login-assets/login.html" ]; then
     cp -f "$ROOT/src/Durlinks.AdminWeb/login-assets/login.html" "$OUT/wwwroot-admin/login.html"
@@ -34,6 +34,7 @@ if [ ! -f "$OUT/appsettings.json" ]; then
   "Kestrel": { "Host": "localhost" },
   "Ports": { "Public": 8789, "Admin": 8788 },
   "StaticFiles": { "UserDir": "wwwroot-user", "AdminDir": "wwwroot-admin" },
+  "Web": { "Mode": "go" },
   "Jwt": { "Secret": "$SECRET" }
 }
 EOF

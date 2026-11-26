@@ -47,9 +47,19 @@ wwwroot-admin/       管理端静态站（含 login.html）
   "Kestrel": { "Host": "localhost" },
   "Ports": { "Public": 8789, "Admin": 8788 },
   "StaticFiles": { "UserDir": "wwwroot-user", "AdminDir": "wwwroot-admin" },
+  "Web": { "Mode": "go" },
   "Jwt": { "Secret": "至少 32 位随机串" }
 }
 ```
+
+`Web.Mode` 决定用户端首页怎么来：
+
+| 值 | 行为 | 依赖 |
+| --- | --- | --- |
+| `go`（默认） | Go 用 `html/template` 直接渲染首页，模板与 CSS 用 `embed` 打进二进制 | **零前端产物**，首屏约 36KB |
+| `static` | 回退到托管 `wwwroot-user` 里的 Blazor WASM 产物 | 需要跑过 `dotnet publish`，首屏要拉 27MB |
+
+交互用普通 GET 表单 + 链接（筛选、翻页、库切换都体现在 URL 上，可分享可后退），只有「复制提取码」用了一小段内联 JS。
 
 环境变量优先：`DURLINKS_DB_PROVIDER`、`DURLINKS_DB_PATH`、`DURLINKS_POSTGRES`、`DURLINKS_PORT_PUBLIC`、`DURLINKS_PORT_ADMIN`、`DURLINKS_JWT_SECRET`、`DURLINKS_HOST`、`DURLINKS_STATIC_USER`、`DURLINKS_STATIC_ADMIN`、`DURLINKS_ADMIN_PASSWORD`、`DURLINKS_ENV`。
 
@@ -68,6 +78,7 @@ wwwroot-admin/       管理端静态站（含 login.html）
 | 分类 | 分组/平台/标签/链接形式 的增删改、批量删除 |
 | 看板 | `/api/admin/stats` |
 | LLM | 配置多站点 CRUD、设默认、切模型、连通性测试、模型列表 |
+| 用户端页面 | `GET /` 由 Go 直接渲染（`html/template` + `embed`），筛选/翻页/库切换走普通 GET，URL 可分享 |
 | Excel | 模板下载、同步导入（≤10MB）、后台任务导入（进度/取消）、导出 |
 | AI 补料 | 单条生成标签+摘要、批量任务（仅未补料/全部、并发 1-8、进度轮询、取消） |
 | 数据包 | 密码二次确认后导出 zip（links.xlsx + libraries.json + stats.json + README） |

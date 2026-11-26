@@ -6,19 +6,17 @@ import (
 	"strings"
 )
 
-// handlePublicLibraries GET /api/libraries?channel=web|client
-func (a *App) handlePublicLibraries(w http.ResponseWriter, r *http.Request) {
-	channel := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("channel")))
+// publicLibraries 返回指定渠道可见的发布库（用户端首页与服务端渲染共用）。
+func (a *App) publicLibraries(channel string) ([]LibraryDto, error) {
 	cond := `"IsDeleted" = ` + a.db.False()
-	if channel == "client" {
+	if strings.EqualFold(channel, "client") {
 		cond += ` AND "VisibleOnClient" = ` + a.db.True()
 	} else {
 		cond += ` AND "VisibleOnWeb" = ` + a.db.True()
 	}
 	rows, err := a.db.sql.Query(`SELECT "Id","Name","Description","VisibleOnWeb","VisibleOnClient","SortOrder","CreatedAt" FROM "PublishLibraries" WHERE ` + cond + ` ORDER BY "SortOrder","Id"`)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+		return nil, err
 	}
 	defer rows.Close()
 	out := []LibraryDto{}
@@ -31,14 +29,24 @@ func (a *App) handlePublicLibraries(w http.ResponseWriter, r *http.Request) {
 			createdAt       any
 		)
 		if err := rows.Scan(&id, &name, &desc, &onWeb, &onClient, &sortOrder, &createdAt); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
+			return nil, err
 		}
 		out = append(out, LibraryDto{
 			ID: id, Name: name, Description: nullableString(desc),
 			VisibleOnWeb: scanBool(onWeb), VisibleOnClient: scanBool(onClient),
 			SortOrder: sortOrder, CreatedAt: isoTime(scanTime(createdAt)),
 		})
+	}
+	return out, rows.Err()
+}
+
+// handlePublicLibraries GET /api/libraries?channel=web|client
+func (a *App) handlePublicLibraries(w http.ResponseWriter, r *http.Request) {
+	channel := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("channel")))
+	out, err := a.publicLibraries(channel)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 	writeOK(w, out)
 }

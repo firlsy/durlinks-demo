@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>链接仓库 · 搜索</title>
+<link rel="stylesheet" href="/assets/css/app.css?v=2">
+<link rel="icon" type="image/png" href="/assets/favicon.png">
+</head>
+<body>
+
+<div class="hero">
+  <h1>🔗 链接仓库</h1>
+  <p>搜索、筛选、收藏 —— 所有链接一目了然</p>
+</div>
+
+{{ if .Libraries }}
+<div class="lib-tabs" role="group" aria-label="发布库筛选">
+  <a class="lib-tab{{ if not .SelLibrary }} on{{ end }}" href="{{ .Link "libraryId" 0 }}">全部</a>
+  {{ range .Libraries }}
+  <a class="lib-tab{{ if eq $.SelLibrary .ID }} on{{ end }}" href="{{ $.Link "libraryId" .ID }}">{{ .Name }}</a>
+  {{ end }}
+  {{ if or .SelLibrary .Q }}
+  <span class="lib-hint">{{ if .SelLibrary }}当前库：{{ .LibName }} · {{ end }}搜索条件已保留</span>
+  {{ end }}
+</div>
+{{ end }}
+
+<form class="search-bar" method="get" action="/">
+  {{ if .SelLibrary }}<input type="hidden" name="libraryId" value="{{ .SelLibrary }}">{{ end }}
+  <input class="search-input" type="search" name="q" value="{{ .Q }}"
+         placeholder="搜索名称、链接、摘要…（回车）" autocomplete="off">
+  <select class="filter-select" name="group" onchange="this.form.submit()">
+    <option value="">全部分组</option>
+    {{ range .Filters.Groups }}<option value="{{ . }}"{{ if eq $.Group . }} selected{{ end }}>{{ . }}</option>{{ end }}
+  </select>
+  <select class="filter-select" name="tag" onchange="this.form.submit()">
+    <option value="">全部标签</option>
+    {{ range .Filters.Tags }}<option value="{{ . }}"{{ if eq $.Tag . }} selected{{ end }}>{{ . }}</option>{{ end }}
+  </select>
+  <select class="filter-select" name="platform" onchange="this.form.submit()">
+    <option value="">全部平台</option>
+    {{ range .Filters.Platforms }}<option value="{{ . }}"{{ if eq $.Platform . }} selected{{ end }}>{{ . }}</option>{{ end }}
+  </select>
+  <select class="filter-select" name="source" onchange="this.form.submit()">
+    <option value="">全部来源</option>
+    <option value="0"{{ if eq .Source "0" }} selected{{ end }}>人工导入</option>
+    <option value="1"{{ if eq .Source "1" }} selected{{ end }}>AI接入</option>
+  </select>
+  <button type="submit" class="search-go">搜索</button>
+</form>
+
+<p class="status">共 <b>{{ .Total }}</b> 条结果 · 第 {{ .Page }}/{{ .MaxPage }} 页{{ if .SelLibrary }}<span class="status-lib"> · {{ .LibName }}</span>{{ end }}{{ if .Q }}<span class="status-lib"> · 关键词「{{ .Q }}」</span>{{ end }}</p>
+
+{{ if .Items }}
+<div class="cards">
+  {{ range .Items }}
+  <article class="card">
+    <div class="card-row1">
+      <h3 class="card-title">{{ .Title }}</h3>
+      <div class="urls">
+        {{ range .AllURLs }}<a href="{{ . }}" target="_blank" rel="noopener" class="url-link">{{ short . }}</a>{{ end }}
+      </div>
+      <div class="meta">
+        <span class="tag type-tag">{{ .LinkType }}</span>
+        <span class="tag group">{{ .GroupName }}</span>
+        {{ if .Platform }}<span class="tag platform">{{ .Platform }}</span>{{ end }}
+        {{ if .Version }}<span class="tag version">{{ .Version }}</span>{{ end }}
+      </div>
+      <span class="source-badge {{ if .IsAI }}ai{{ else }}manual{{ end }}">{{ .ImportSourceLabel }}</span>
+    </div>
+
+    <div class="card-row2">
+      {{ if .Summary }}<p class="summary">{{ .Summary }}</p>{{ end }}
+      {{ if .ExtractCode }}
+      <div class="detail">提取码：<code>{{ .ExtractCode }}</code>
+        <button type="button" class="copy-btn" data-copy="{{ .ExtractCode }}">复制</button>
+        {{ if .ExpireAt }}<span class="detail"> · 过期：{{ .ExpireAt }}</span>{{ end }}
+      </div>
+      {{ end }}
+      {{ if .SubLinks }}
+      <div class="sublinks">
+        <span class="sub-label">附属链接：</span>
+        {{ range .SubLinks }}<a href="{{ .URL }}" target="_blank" rel="noopener">{{ if .Title }}{{ .Title }}{{ else }}{{ short .URL }}{{ end }}</a>{{ end }}
+      </div>
+      {{ end }}
+      {{ if .Tags }}
+      <div class="tags-row">{{ range .Tags }}<span class="mini-tag">#{{ . }}</span>{{ end }}</div>
+      {{ end }}
+    </div>
+  </article>
+  {{ end }}
+</div>
+{{ else }}
+<p class="status">没有匹配的链接，换个关键词试试。</p>
+{{ end }}
+
+{{ if gt .TotalPages 1 }}
+<div class="pager">
+  {{ if gt .Page 1 }}<a href="{{ .Link "page" .PrevPage }}">上一页</a>{{ else }}<span class="disabled">上一页</span>{{ end }}
+  <span>{{ .Page }} / {{ .TotalPages }}</span>
+  {{ if lt .Page .TotalPages }}<a href="{{ .Link "page" .NextPage }}">下一页</a>{{ else }}<span class="disabled">下一页</span>{{ end }}
+</div>
+{{ end }}
+
+<script>
+// 复制提取码：优先 Clipboard API，http 下退回 execCommand
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('.copy-btn');
+  if (!b) return;
+  var t = b.getAttribute('data-copy') || '';
+  var done = function () { b.textContent = '已复制'; setTimeout(function () { b.textContent = '复制'; }, 1200); };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(t).then(done, done);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (err) {}
+    document.body.removeChild(ta); done();
+  }
+});
+// 搜索框失焦且内容变化时自动提交，照顾不按回车的习惯
+(function () {
+  var i = document.querySelector('.search-input');
+  if (!i) return;
+  var init = i.value;
+  i.addEventListener('change', function () { if (i.value !== init) i.form.submit(); });
+})();
+</script>
+</body>
+</html>

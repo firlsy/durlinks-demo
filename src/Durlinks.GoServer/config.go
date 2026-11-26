@@ -33,6 +33,10 @@ type Config struct {
 	Jwt struct {
 		Secret string `json:"secret"`
 	} `json:"jwt"`
+	// Web.Mode: go=Go 服务端直接渲染用户端（默认，不依赖 .NET 产物）；static=托管 wwwroot-user 静态站
+	Web struct {
+		Mode string `json:"mode"`
+	} `json:"web"`
 	BatchEnrich struct {
 		MaxItems      int `json:"maxItems"`
 		MinIntervalMs int `json:"minIntervalMs"`
@@ -50,6 +54,7 @@ func LoadConfig(path string) (*Config, error) {
 	c.Ports.Admin = 8788
 	c.StaticFiles.UserDir = "wwwroot-user"
 	c.StaticFiles.AdminDir = "wwwroot-admin"
+	c.Web.Mode = "go"
 	c.BatchEnrich.MaxItems = 200000
 	c.BatchEnrich.MinIntervalMs = 100
 
@@ -110,6 +115,12 @@ func LoadConfig(path string) (*Config, error) {
 	c.Database.Provider = strings.ToLower(strings.TrimSpace(c.Database.Provider))
 	if c.Database.Provider == "" {
 		c.Database.Provider = "sqlite"
+	}
+
+	// 用户端渲染模式：默认 go（服务端直出）；显式写 static 才回退到托管 wwwroot-user
+	c.Web.Mode = strings.ToLower(strings.TrimSpace(c.Web.Mode))
+	if c.Web.Mode != "static" {
+		c.Web.Mode = "go"
 	}
 	return c, nil
 }
