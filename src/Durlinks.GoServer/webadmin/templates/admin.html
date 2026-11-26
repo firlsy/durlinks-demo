@@ -1,42 +1,44 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ .Title }} · Durlinks 管理控制台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>durlinks-demo · 管理控制台</title>
 <link rel="stylesheet" href="/console/assets/admin.css?v=3">
 <link rel="icon" type="image/png" href="/console/assets/favicon.png">
 </head>
 <body>
+<div id="flashBar" class="flash-bar" hidden></div>
 
 <div class="console{{ if .NavFolded }} nav-folded{{ end }}">
   <aside class="sidebar">
+    <button class="side-fold" id="navFold" title="收起/展开功能菜单">{{ if .NavFolded }}»{{ else }}«{{ end }}</button>
     <div class="side-brand">
       <div class="side-logo">DL</div>
-      <div>
-        <div class="side-name">durlinks-demo</div>
-        <div class="side-sub">V1.8.26 管理控制台</div>
-      </div>
+      <div><div class="side-name">durlinks-demo <span class="ver">v1.8.26</span></div><div class="side-sub">管理控制台</div></div>
     </div>
-    <button class="side-fold" id="sideFold" title="收起/展开侧边栏">«</button>
-
     <div class="side-label">主菜单</div>
     <nav>
-      <a class="{{ if eq .View "dashboard" }}active{{ end }}" href="/console?view=dashboard"><span class="ico">▦</span>数据看板</a>
-      <a class="{{ if eq .View "publish" }}active{{ end }}" href="/console?view=publish"><span class="ico">🗂</span>发布管理</a>
-      <a class="{{ if eq .View "categories" }}active{{ end }}" href="/console?view=categories"><span class="ico">▤</span>分组管理</a>
-      <a class="{{ if eq .View "users" }}active{{ end }}" href="/console?view=users"><span class="ico">☰</span>用户</a>
-      <a class="{{ if eq .View "llm" }}active{{ end }}" href="/console?view=llm"><span class="ico">✦</span>大模型</a>
-      <a class="{{ if eq .View "account" }}active{{ end }}" href="/console?view=account"><span class="ico">⚙</span>账号设置</a>
+      <button class="{{ if eq .View "dashboard" }}active{{ end }}" onclick="go('{{ .Link "view" "dashboard" }}')"><span class="ico">▦</span>数据看板</button>
+      <button class="{{ if eq .View "publish" }}active{{ end }}" onclick="go('{{ .Link "view" "publish" }}')"><span class="ico">🗂</span>发布管理</button>
+      <button class="{{ if eq .View "categories" }}active{{ end }}" onclick="go('{{ .Link "view" "categories" }}')"><span class="ico">▤</span>分组管理</button>
+      <button class="{{ if eq .View "users" }}active{{ end }}" onclick="go('{{ .Link "view" "users" }}')"><span class="ico">☰</span>用户管理</button>
+      <button class="{{ if eq .View "llm" }}active{{ end }}" onclick="go('{{ .Link "view" "llm" }}')"><span class="ico">✦</span>LLM 设置</button>
+      <button class="{{ if eq .View "account" }}active{{ end }}" onclick="go('{{ .Link "view" "account" }}')"><span class="ico">⚙</span>账号设置</button>
     </nav>
-
     <div class="side-spacer"></div>
+    <div class="side-bottom">
+      <div class="side-label">偏好</div>
+      <div class="lang-inline">
+        <span>语言</span>
+        <button class="on">中文</button>
+        <button disabled title="英文界面暂未迁移">EN</button>
+      </div>
+    </div>
     <div class="side-user">
       <div class="avatar">{{ .Initial }}</div>
-      <div>
-        <div class="u-name">{{ .User }}</div>
-        <div class="u-role">{{ .Role }}</div>
-      </div>
+      <div><div class="u-name">{{ .User }}</div><div class="u-role">{{ .Role }} · 超级管理员</div></div>
+      <button class="logout-mini" onclick="logout()" title="退出">⇥</button>
     </div>
   </aside>
 
@@ -44,163 +46,175 @@
     <header class="topbar">
       <h1>{{ .Title }}</h1>
       <div class="top-actions">
-        <a class="ghost" href="{{ .Link }}">⟳ 刷新</a>
-        <a class="ghost" href="/" onclick="try{localStorage.clear()}catch(e){}">⇥ 退出</a>
+        <button class="ghost" onclick="location.reload()">⟳ 刷新</button>
+        <button class="ghost" onclick="logout()">⇥ 退出</button>
       </div>
     </header>
 
     <div class="content">
     {{ if eq .View "dashboard" }}
       <div class="stats-grid">
-        <div class="stat-card"><div class="stat-icon blue">🔗</div><div><div class="stat-label">链接总数</div><div class="stat-value">{{ index .Stats "total" }}</div></div></div>
-        <div class="stat-card"><div class="stat-icon gray">◌</div><div><div class="stat-label">已隐藏</div><div class="stat-value">{{ index .Stats "hidden" }}</div></div></div>
-        <div class="stat-card"><div class="stat-icon purple">✦</div><div><div class="stat-label">AI 接入</div><div class="stat-value">{{ index .Stats "aiCount" }}</div></div></div>
-        <div class="stat-card"><div class="stat-icon orange">▦</div><div><div class="stat-label">分组数</div><div class="stat-value">{{ index .Stats "groups" }}</div></div></div>
+        <div class="stat-card"><div class="stat-icon blue">🔗</div><div><div class="stat-label">链接总数</div><div class="stat-value">{{ .Num "total" }}</div></div></div>
+        <div class="stat-card"><div class="stat-icon gray">◌</div><div><div class="stat-label">已隐藏</div><div class="stat-value">{{ .Num "hidden" }}</div></div></div>
+        <div class="stat-card"><div class="stat-icon purple">✦</div><div><div class="stat-label">AI 接入</div><div class="stat-value">{{ .Num "aiCount" }}</div></div></div>
+        <div class="stat-card"><div class="stat-icon orange">▦</div><div><div class="stat-label">分组数</div><div class="stat-value">{{ .Num "groups" }}</div></div></div>
       </div>
 
       <div class="panel-row">
         <div class="panel">
-          <div class="panel-title">来源统计</div>
+          <div class="panel-title">来源分布</div>
           <div class="bar-chart">
-            <div class="bar-item"><div class="bar" style="height:{{ .BarManual }}%"></div><span>人工</span></div>
-            <div class="bar-item"><div class="bar purple" style="height:{{ .BarAI }}%"></div><span>AI 接入</span></div>
-            <div class="bar-item"><div class="bar teal" style="height:{{ .BarNetdisk }}%"></div><span>网盘</span></div>
+            <div class="bar-item"><div class="bar" style="height:{{ .BarManual }}%"></div><span>人工导入</span></div>
+            <div class="bar-item"><div class="bar purple" style="height:{{ .BarAI }}%"></div><span>AI接入</span></div>
+            <div class="bar-item"><div class="bar teal" style="height:{{ .BarNetdisk }}%"></div><span>网盘链接</span></div>
             <div class="bar-item"><div class="bar orange" style="height:{{ .BarDownload }}%"></div><span>下载直链</span></div>
           </div>
         </div>
         <div class="panel">
           <div class="panel-title">快捷操作</div>
           <div class="quick-actions">
-            <a class="btn-like" href="/console?view=publish&import=1">⇩ 导入链接</a>
-            <a class="btn-like" href="/console?view=publish">🗂 发布管理</a>
+            <button onclick="openImport()">⇩ 去导入</button>
+            <button onclick="go('{{ .Link "view" "publish" }}')">🗂 发布管理</button>
           </div>
           <div class="mini-stats">
-            <div>标签<b>{{ index .Stats "tags" }}</b></div>
-            <div>网盘<b>{{ index .Stats "netdisk" }}</b></div>
-            <div>下载直链<b>{{ index .Stats "download" }}</b></div>
+            <div>标签数<b>{{ .Num "tags" }}</b></div>
+            <div>网盘链接<b>{{ .Num "netdisk" }}</b></div>
+            <div>下载直链<b>{{ .Num "download" }}</b></div>
           </div>
         </div>
       </div>
 
     {{ else if eq .View "publish" }}
-      <div class="publish-layout">
-        <aside class="panel lib-column">
+      <div class="publish-layout{{ if .LibFolded }} lib-folded{{ end }}">
+        <aside class="panel lib-column{{ if .LibFolded }} folded{{ end }}">
+          <button class="col-fold" onclick="go('{{ .Link "fold" .FoldNext }}')" title="收起/展开发布库">{{ if .LibFolded }}»{{ else }}«{{ end }}</button>
+          {{ if not .LibFolded }}
           <div class="lib-section">
             <div class="lib-head"><div><h3>发布库 <span class="badge manual" style="margin-left:6px">{{ len .Libs }}</span></h3></div></div>
             <div class="lib-grid lib-list">
               {{ range .Libs }}
-              <div class="lib-card{{ if eq $.CurLib .ID }} on{{ end }}">
+              {{ if and $.LibEditing (eq $.LibEditID .ID) }}
+              {{/* 编辑：就地在原卡片位置展开表单，保存/取消后原地复原（与 .NET 版一致） */}}
+              <div class="lib-card editing">
                 <div class="lib-card-head">
-                  <a class="lib-name" href="{{ $.Link "lib" .ID "page" 0 }}" title="{{ .Name }}">{{ .Name }}</a>
+                  <span class="lib-name">编辑发布库</span>
                   <span class="lib-actions" style="opacity:1">
-                    <button class="js-lib-edit" data-id="{{ .ID }}" data-name="{{ .Name }}"
-                      data-desc="{{ ptr .Description }}" data-web="{{ if .VisibleOnWeb }}1{{ else }}0{{ end }}"
-                      data-client="{{ if .VisibleOnClient }}1{{ else }}0{{ end }}" data-sort="{{ .SortOrder }}">✎</button>
-                    <button class="danger js-lib-del" data-id="{{ .ID }}" data-name="{{ .Name }}">×</button>
+                    <button onclick="go('{{ $.Link "libedit" 0 }}')" title="取消">×</button>
+                  </span>
+                </div>
+                <label>发布库名称</label>
+                <input id="libEditName" value="{{ .Name }}" placeholder="例如：软件下载 / 内部工具">
+                <label>描述（可选）</label>
+                <input id="libEditDesc" value="{{ ptr .Description }}">
+                <div class="checks">
+                  <label><input type="checkbox" id="libEditWeb"{{ if .VisibleOnWeb }} checked{{ end }}> 网页端可见</label>
+                  <label><input type="checkbox" id="libEditClient"{{ if .VisibleOnClient }} checked{{ end }}> 客户端可见</label>
+                </div>
+                <div class="btn-row">
+                  <button class="primary" onclick="saveLibInline({{ .ID }})">保存</button>
+                  <button onclick="go('{{ $.Link "libedit" 0 }}')">取消</button>
+                </div>
+                <p class="msg err" id="libEditMsg" style="display:none"></p>
+              </div>
+              {{ else }}
+              <div class="lib-card{{ if eq $.CurLib .ID }} on{{ end }}" onclick="go('{{ $.Link "lib" .ID "page" 0 }}')">
+                <div class="lib-card-head">
+                  <span class="lib-name" title="{{ .Name }}">{{ .Name }}</span>
+                  <span class="lib-actions">
+                    <button onclick="event.stopPropagation();go('{{ $.Link "libedit" .ID }}')" title="编辑">✎</button>
+                    <button class="danger" onclick="event.stopPropagation();openLibDelete(this)" data-id="{{ .ID }}" data-name="{{ .Name }}" data-count="{{ .LinkCount }}" title="删除">×</button>
                   </span>
                 </div>
                 <div class="lib-count"><b>{{ .LinkCount }}</b> 条链接</div>
                 <div class="lib-channels">
-                  <button type="button" class="ch-pill {{ if .VisibleOnWeb }}on{{ else }}off{{ end }} js-lib-ch" data-id="{{ .ID }}" data-side="web">网页端</button>
-                  <button type="button" class="ch-pill {{ if .VisibleOnClient }}on{{ else }}off{{ end }} js-lib-ch" data-id="{{ .ID }}" data-side="client">客户端</button>
+                  <button type="button" class="ch-pill {{ if .VisibleOnWeb }}on{{ else }}off{{ end }}" onclick="event.stopPropagation();toggleChannel({{ .ID }},true)" title="点击切换是否在网页端显示">网页端</button>
+                  <button type="button" class="ch-pill {{ if .VisibleOnClient }}on{{ else }}off{{ end }}" onclick="event.stopPropagation();toggleChannel({{ .ID }},false)" title="点击切换是否在客户端显示">客户端</button>
                 </div>
               </div>
               {{ end }}
-              <a class="lib-new" href="{{ .Link "lib" 0 }}"><span class="plus">◉</span><span>全部发布库</span></a>
-              <button class="lib-new" id="libAdd" style="border-style:dashed"><span class="plus">+</span><span>新建发布库</span></button>
+              {{ end }}
+              {{ if $.LibNew }}
+              {{/* 新建发布库：没有"原位置"可言，仍显示在列表下方（与 .NET 版一致） */}}
+              <div class="lib-form">
+                <label>发布库名称</label>
+                <input id="libNewName" value="" placeholder="例如：软件下载 / 内部工具">
+                <label>描述（可选）</label>
+                <input id="libNewDesc" value="">
+                <div class="checks">
+                  <label><input type="checkbox" id="libNewWeb" checked> 网页端可见</label>
+                  <label><input type="checkbox" id="libNewClient" checked> 客户端可见</label>
+                </div>
+                <div class="btn-row">
+                  <button class="primary" onclick="saveLibNew()">保存</button>
+                  <button onclick="go('{{ .Link "libnew" 0 }}')">取消</button>
+                </div>
+                <p class="msg err" id="libNewMsg" style="display:none"></p>
+              </div>
+              {{ else }}
+              <button class="lib-new" onclick="go('{{ .Link "libnew" 1 }}')"><span class="plus">+</span><span>新建发布库</span></button>
+              {{ end }}
             </div>
           </div>
+          {{ end }}
         </aside>
 
         <div class="links-column">
-          {{ if .Editing }}
           <div class="panel">
-            <div class="panel-title">编辑链接 #{{ .Editing.ID }}</div>
-            <form method="post" action="/console/link/{{ .Editing.ID }}">
-              <input type="hidden" name="back" value="{{ .BackQuery }}">
-              <label>名称</label>
-              <input name="title" value="{{ .Editing.Title }}" />
-              <label>链接</label>
-              <input name="url" value="{{ .Editing.URL }}" />
-              <div class="form-grid">
-                <div><label>链接形式</label>
-                  <select name="linkType">
-                    {{ range .Cats.LinkTypes }}<option value="{{ . }}"{{ if eq $.Editing.LinkType . }} selected{{ end }}>{{ . }}</option>{{ end }}
-                  </select>
-                </div>
-                <div><label>分组</label><input name="groupName" value="{{ .Editing.GroupName }}" list="dlGroups" /></div>
-                <div><label>平台</label><input name="platform" value="{{ ptr .Editing.Platform }}" list="dlPlatforms" /></div>
-                <div><label>版本</label><input name="version" value="{{ ptr .Editing.Version }}" /></div>
-                <div><label>提取码</label><input name="extractCode" value="{{ ptr .Editing.ExtractCode }}" /></div>
-                <div><label>过期时间</label><input name="expireAt" value="{{ ptr .Editing.ExpireAt }}" /></div>
-              </div>
-              <label>备注</label><input name="remark" value="{{ ptr .Editing.Remark }}" />
-              <label>AI 摘要</label><input name="summary" value="{{ ptr .Editing.Summary }}" />
-              <label>标签（逗号或分号分隔）</label><input name="tags" value="{{ join .Editing.Tags "; " }}" />
-              <label class="inline"><input type="checkbox" name="isHidden" value="1"{{ if .Editing.IsHidden }} checked{{ end }} /> 在用户端隐藏</label>
-              <div class="btn-row">
-                <button class="primary" type="submit">保存</button>
-                <a class="btn-like" href="{{ .Link "edit" 0 }}">取消</a>
-              </div>
-            </form>
-            <datalist id="dlGroups">{{ range .Cats.Groups }}<option value="{{ . }}">{{ end }}</datalist>
-            <datalist id="dlPlatforms">{{ range .Cats.Platforms }}<option value="{{ . }}">{{ end }}</datalist>
-          </div>
-          {{ end }}
+            <div class="panel-title">
+              {{ if .CurLibName }}{{ .CurLibName }}{{ else }}链接管理{{ end }}
+              <span class="badge manual" style="margin-left:8px">{{ .Total }}</span>
+            </div>
 
-          <div class="panel">
-            <form class="toolbar" method="get" action="/console">
-              <input type="hidden" name="view" value="publish" />
-              {{ if .CurLib }}<input type="hidden" name="lib" value="{{ .CurLib }}">{{ end }}
-              <input class="search-input" type="search" name="q" value="{{ .Q }}" placeholder="搜索名称 / 链接 / 分组…（回车）">
-              <select name="src" onchange="this.form.submit()">
+            <div class="toolbar">
+              <input placeholder="搜索名称/链接…" value="{{ .Q }}" onkeydown="if(event.key==='Enter')applySearch(this.value)">
+              <select onchange="applySrc(this.value)">
                 <option value="">全部来源</option>
-                <option value="0"{{ if eq .Src "0" }} selected{{ end }}>人工</option>
-                <option value="1"{{ if eq .Src "1" }} selected{{ end }}>AI 接入</option>
+                <option value="0"{{ if eq .Src "0" }} selected{{ end }}>人工导入</option>
+                <option value="1"{{ if eq .Src "1" }} selected{{ end }}>AI接入</option>
               </select>
-              <button type="submit">搜索</button>
-              <label class="page-size">
-                <span>每页</span>
-                <select name="size" onchange="this.form.submit()">
-                  {{ range .PageSizes }}<option value="{{ . }}"{{ if eq $.PageSize . }} selected{{ end }}>{{ . }}</option>{{ end }}
-                </select>
-                <span>条</span>
-              </label>
-            </form>
-
-            <div class="toolbar batch-bar">
-              <span class="sel-count">已选 <b id="selCount">0</b> 条</span>
-              <button type="button" id="batchHide">隐藏</button>
-              <button type="button" id="batchShow">显示</button>
-              <button type="button" class="danger" id="batchDel">删除</button>
-              <button type="button" id="dedupeBtn" title="清理当前库内 URL 重复的链接">去重</button>
-              <a class="btn-like" href="/api/admin/ai/enrich/export{{ if .CurLib }}?libraryId={{ .CurLib }}{{ end }}" id="exportLinks">导出</a>
-              <a class="btn-like primary" href="/console?view=publish{{ if .CurLib }}&lib={{ .CurLib }}{{ end }}&import=1">⇩ 导入链接</a>
-              {{ if gt (len .Libs) 1 }}
-              <span class="sel-count move-label">移动到</span>
-              <select id="targetLib">
-                <option value="0">选择目标发布库…</option>
-                {{ range .Libs }}{{ if ne .ID $.CurLib }}<option value="{{ .ID }}">{{ .Name }}</option>{{ end }}{{ end }}
-              </select>
-              <button type="button" id="moveBtn">移动</button>
-              <button type="button" id="copyBtn">复制</button>
-              {{ end }}
+              <button class="primary" onclick="openLinkNew()">+ 新建链接</button>
+              <button onclick="openImport()">⇩ 导入</button>
+              <span class="sel-count">已选 <b id="selCount">0</b></span>
+              <button onclick="batchHidden(true)">隐藏</button>
+              <button onclick="batchHidden(false)">显示</button>
+              <button class="danger" onclick="batchDel()">删除</button>
+              <button onclick="openDedupe()" title="清理当前库内 URL 重复的链接">去重</button>
+              <button onclick="exportLinks()">导出</button>
             </div>
 
             <div class="toolbar enrich-bar">
               <span class="sel-count">✦ 批量 AI 补料（为无摘要/标签的链接生成标签与摘要）</span>
-              <label class="mini-field">范围
-                <select id="enrichMode">
+              <label style="font-size:12px;color:#64748b">范围
+                <select id="enrichMode" style="padding:3px 6px">
                   <option value="missing">仅未补料</option>
                   <option value="all">全部</option>
                 </select>
               </label>
-              <label class="mini-field">条数
-                <input type="number" id="enrichLimit" value="100" min="1" max="100000" style="width:92px">
+              <label style="font-size:12px;color:#64748b">条数
+                <input type="number" id="enrichLimit" value="100" min="1" max="100000" style="width:92px;padding:3px 6px">
               </label>
-              <button type="button" id="enrichStart">开始补料</button>
-              <button type="button" id="enrichCancel" style="display:none">取消</button>
+              <button id="enrichStart" onclick="startEnrich()">开始补料</button>
+              <button id="enrichCancel" onclick="cancelEnrich()" style="display:none">取消</button>
               <span class="enrich-progress" id="enrichProgress" style="display:none"></span>
+            </div>
+
+            <div class="toolbar move-bar">
+              {{ if gt (len .Libs) 1 }}
+              <span class="sel-count">移动到/复制到</span>
+              <select id="targetLib">
+                <option value="0">选择目标发布库…</option>
+                {{ range .Libs }}{{ if ne .ID $.CurLib }}<option value="{{ .ID }}">{{ .Name }}</option>{{ end }}{{ end }}
+              </select>
+              <button onclick="transfer(false)">移动</button>
+              <button onclick="transfer(true)">复制</button>
+              {{ end }}
+              <label class="page-size">
+                <span>每页</span>
+                <select onchange="applySize(this.value)" title="当前页显示条数">
+                  {{ range .PageSizes }}<option value="{{ . }}"{{ if eq $.PageSize . }} selected{{ end }}>{{ . }}</option>{{ end }}
+                </select>
+                <span>条</span>
+              </label>
             </div>
 
             <table class="grid links-grid">
@@ -210,13 +224,13 @@
                 <col style="width:6%"><col style="width:134px">
               </colgroup>
               <thead><tr>
-                <th><input type="checkbox" id="checkAll"></th>
+                <th title="全选/取消全选当前列表"><input type="checkbox" id="checkAll"></th>
                 <th>名称</th><th>链接</th><th>摘要</th><th>形式</th><th>分组</th>
                 <th>平台</th><th>来源</th><th>状态</th><th>操作</th>
               </tr></thead>
               <tbody>
               {{ range .Links }}
-                <tr data-id="{{ .ID }}">
+                <tr>
                   <td><input type="checkbox" class="row-check" value="{{ .ID }}"></td>
                   <td><a href="{{ .URL }}" target="_blank" rel="noopener noreferrer" title="{{ .Title }}">{{ .Title }}</a></td>
                   <td><a class="url-cell" href="{{ .URL }}" target="_blank" rel="noopener noreferrer" title="{{ .URL }}">{{ .URL }}</a></td>
@@ -227,10 +241,10 @@
                   <td><span class="badge {{ if isAI .ImportSource }}ai{{ else }}manual{{ end }}">{{ if isAI .ImportSource }}AI{{ else }}人工{{ end }}</span></td>
                   <td>{{ if .IsHidden }}已隐藏{{ else }}可见{{ end }}</td>
                   <td class="row-actions">
-                    <a class="btn-like sm" href="{{ $.Link "edit" .ID }}">编辑</a>
-                    <button type="button" class="js-hide" data-id="{{ .ID }}" data-hidden="{{ if .IsHidden }}0{{ else }}1{{ end }}">{{ if .IsHidden }}显示{{ else }}隐藏{{ end }}</button>
-                    <button type="button" class="js-enrich" data-id="{{ .ID }}" title="AI 补料">AI</button>
-                    <button type="button" class="danger js-del" data-id="{{ .ID }}">×</button>
+                    <button onclick="openLinkEdit({{ .ID }})">编辑</button>
+                    <button onclick="setHidden({{ .ID }},{{ if .IsHidden }}false{{ else }}true{{ end }})">{{ if .IsHidden }}显示{{ else }}隐藏{{ end }}</button>
+                    <button onclick="enrichOne({{ .ID }})">AI</button>
+                    <button class="danger" onclick="delOne({{ .ID }})">×</button>
                   </td>
                 </tr>
               {{ end }}
@@ -240,10 +254,13 @@
             <div class="pager">
               <span class="total-line" style="margin:0">共 {{ .Total }} 条 · 第 {{ .Page }} / {{ .MaxPage }} 页 · 每页 {{ .PageSize }} 条</span>
               <span class="pager-btns">
-                <a class="btn-like sm{{ if eq .Page 1 }} disabled{{ end }}" href="{{ .Link "page" 1 }}">«</a>
-                <a class="btn-like sm{{ if eq .Page 1 }} disabled{{ end }}" href="{{ .Link "page" .PrevPage }}">上一页</a>
-                <a class="btn-like sm{{ if ge .Page .MaxPage }} disabled{{ end }}" href="{{ .Link "page" .NextPage }}">下一页</a>
-                <a class="btn-like sm{{ if ge .Page .MaxPage }} disabled{{ end }}" href="{{ .Link "page" .MaxPage }}">»</a>
+                <button onclick="go('{{ .Link "page" 1 }}')" {{ if eq .Page 1 }}disabled{{ end }} title="首页">«</button>
+                <button onclick="go('{{ .Link "page" .PrevPage }}')" {{ if eq .Page 1 }}disabled{{ end }}>上一页</button>
+                <select onchange="applyPage(this.value)">
+                  {{ range .PageNums }}<option value="{{ . }}"{{ if eq $.Page . }} selected{{ end }}>{{ . }}</option>{{ end }}
+                </select>
+                <button onclick="go('{{ .Link "page" .NextPage }}')" {{ if ge .Page .MaxPage }}disabled{{ end }}>下一页</button>
+                <button onclick="go('{{ .Link "page" .MaxPage }}')" {{ if ge .Page .MaxPage }}disabled{{ end }} title="末页">»</button>
               </span>
             </div>
           </div>
@@ -251,114 +268,129 @@
       </div>
 
     {{ else if eq .View "categories" }}
-      <div class="toolbar" style="margin-bottom:12px">
-        <a class="btn-like{{ if eq .CatKind "group" }} primary{{ end }}" href="/console?view=categories&kind=group">分组</a>
-        <a class="btn-like{{ if eq .CatKind "platform" }} primary{{ end }}" href="/console?view=categories&kind=platform">平台</a>
-        <a class="btn-like{{ if eq .CatKind "tag" }} primary{{ end }}" href="/console?view=categories&kind=tag">标签</a>
-        <a class="btn-like{{ if eq .CatKind "type" }} primary{{ end }}" href="/console?view=categories&kind=type">链接形式</a>
-      </div>
-      <div class="panel">
-        <div class="panel-title">当前选项 <span class="badge manual" style="margin-left:6px">{{ .CatCount }}</span></div>
-        <div class="toolbar">
-          <input id="catNew" placeholder="输入新名称后回车新建">
-          <button class="primary" id="catAdd" data-kind="{{ .CatKind }}">+ 新建</button>
-          <input id="catFilter" placeholder="筛选当前列表…" oninput="filterCat(this.value)">
-        </div>
-        <table class="grid" id="catTable">
-          <thead><tr><th style="width:60%">名称</th><th>操作</th></tr></thead>
-          <tbody>
-          {{ range .CatValues }}
-            <tr data-name="{{ . }}">
-              <td>{{ . }}</td>
-              <td class="row-actions">
-                <button class="js-cat-rename" data-kind="{{ $.CatKind }}" data-name="{{ . }}">重命名</button>
-                <button class="danger js-cat-del" data-kind="{{ $.CatKind }}" data-name="{{ . }}">×</button>
-              </td>
-            </tr>
+      <div class="publish-layout cat-layout{{ if .CatFolded }} lib-folded{{ end }}">
+        <aside class="panel lib-column{{ if .CatFolded }} folded{{ end }}">
+          <button class="col-fold" onclick="go('{{ .Link "cfold" .CatFoldNext }}')" title="收起/展开分类">{{ if .CatFolded }}»{{ else }}«{{ end }}</button>
+          {{ if not .CatFolded }}
+          <div class="lib-section">
+            <div class="lib-head"><h3>分类 <span class="badge manual" style="margin-left:6px">{{ len .CatSections }}</span></h3></div>
+            <div class="lib-grid lib-list">
+              {{ range .CatSections }}
+              <div class="lib-card{{ if eq $.CatKind .Kind }} on{{ end }}" onclick="go('{{ $.Link "kind" .Kind "term" 0 }}')">
+                <div class="lib-card-head"><span class="lib-name" title="{{ .Title }}">{{ .Title }}</span></div>
+                <div class="lib-count"><b>{{ .Count }}</b> 项</div>
+                <div class="lib-channels"><span class="ch-pill{{ if gt .Selected 0 }} on{{ end }}">已选 {{ .Selected }}</span></div>
+              </div>
+              {{ end }}
+            </div>
+          </div>
           {{ end }}
-          </tbody>
-        </table>
-        {{ if eq .CatCount 0 }}<p class="hint">还没有任何选项，上方输入名称新建一个。</p>{{ end }}
+        </aside>
+
+        <div class="links-column">
+          <div class="panel">
+            <div class="panel-title">{{ .CatTitle }} <span class="badge manual" style="margin-left:6px">{{ .CatCount }}</span></div>
+            <p class="hint">这里维护链接录入和筛选使用的选项。重命名会同步更新已有链接；仍被链接使用的选项不能删除。</p>
+            <div class="toolbar">
+              <input id="catNew" placeholder="输入新名称">
+              <button class="primary" onclick="catAdd()">+ 新建</button>
+              <input id="catFilter" placeholder="搜索选项…" oninput="filterCat(this.value)">
+              <span class="hint" id="catSelHint" style="display:none">已勾选 <b id="catSelCount">0</b> 项</span>
+              <button class="danger-solid" id="catBatchDel" onclick="catBatchDelete()" style="display:none">批量删除</button>
+              <button id="catClear" onclick="catClear()" style="display:none">清空选择</button>
+            </div>
+            <p class="msg" id="catMsg" style="display:none"></p>
+            <div class="cat-table-head">
+              <input type="checkbox" id="catCheckAll">
+              <span>名称</span>
+              <span>操作</span>
+            </div>
+            <div class="category-items category-table">
+              {{ range $i, $v := .CatValues }}
+              <div class="category-item{{ if ge $i 200 }} cat-extra{{ end }}" data-name="{{ $v }}"{{ if ge $i 200 }} style="display:none"{{ end }}>
+                <input type="checkbox" class="cat-check" value="{{ $v }}">
+                <span>{{ $v }}</span>
+                <div class="row-actions">
+                  <button onclick="catRename(this)">重命名</button>
+                  <button class="danger" onclick="catDel(this)">×</button>
+                </div>
+              </div>
+              {{ end }}
+              {{ if eq .CatCount 0 }}<p class="hint">暂无选项</p>{{ end }}
+              {{ if gt .CatCount 200 }}<button class="cat-more" id="catMore" onclick="expandCat()">还有 {{ sub .CatCount 200 }} 项，点击展开</button>{{ end }}
+            </div>
+            <div class="hint" style="margin-top:10px">显示 <span id="catShown">{{ if gt .CatCount 200 }}200{{ else }}{{ .CatCount }}{{ end }}</span> / {{ .CatCount }} 项</div>
+          </div>
+        </div>
       </div>
 
     {{ else if eq .View "users" }}
       <div class="panel">
-        <div class="panel-title">管理员账号</div>
-        <table class="grid">
-          <thead><tr><th style="width:70px">ID</th><th>用户名</th><th>角色</th><th>MFA</th><th>创建时间</th></tr></thead>
-          <tbody>
-          {{ range .Users }}
-            <tr><td>{{ .ID }}</td><td>{{ .Username }}</td><td>{{ .Role }}</td>
-              <td>{{ if .MfaEnabled }}已开启{{ else }}未开启{{ end }}</td><td>{{ .CreatedAt }}</td></tr>
-          {{ end }}
-          </tbody>
-        </table>
+        <div class="panel-title">用户管理</div>
+        {{ if not .IsSuperAdmin }}
+          <p class="hint">仅超级管理员可管理用户。</p>
+        {{ else }}
+          <div class="toolbar">
+            <input id="newUser" placeholder="新用户名">
+            <input id="newPwd" type="password" placeholder="密码">
+            <button class="primary" onclick="createUser()">创建管理员</button>
+          </div>
+          <table class="grid">
+            <thead><tr><th>用户名</th><th>角色</th><th>MFA</th><th>创建时间</th></tr></thead>
+            <tbody>
+            {{ range .Users }}
+              <tr><td>{{ .Username }}</td><td>{{ .Role }}</td><td>{{ if .MfaEnabled }}✓{{ else }}—{{ end }}</td><td>{{ date .CreatedAt }}</td></tr>
+            {{ end }}
+            </tbody>
+          </table>
+        {{ end }}
       </div>
-      {{ if .IsSuperAdmin }}
-      <div class="panel">
-        <div class="panel-title">新建管理员</div>
-        <div class="toolbar">
-          <input id="newUserName" placeholder="用户名">
-          <input id="newUserPwd" type="password" placeholder="密码">
-          <button class="primary" id="createUser">创建</button>
-        </div>
-        <p class="hint">新建账号角色固定为 Admin：可管理链接与发布库，但不能创建账号。</p>
-      </div>
-      {{ end }}
 
     {{ else if eq .View "llm" }}
       <div class="panel">
-        <div class="panel-title">大模型提供商</div>
-        {{ if .LlmConfigs }}
-        <table class="grid">
-          <thead><tr><th>名称</th><th style="width:90px">协议</th><th>模型</th><th>地址</th><th style="width:80px">密钥</th><th style="width:70px">默认</th><th style="width:200px">操作</th></tr></thead>
-          <tbody>
-          {{ range .LlmConfigs }}
-            <tr>
-              <td>{{ .Name }}</td>
-              <td>{{ .Protocol }}</td>
-              <td><span class="multi-cell" title="{{ .Model }}">{{ .Model }}</span></td>
-              <td><span class="url-cell" title="{{ .ApiEndpoint }}">{{ .ApiEndpoint }}</span></td>
-              <td>{{ if .HasApiKey }}已设置{{ else }}未设置{{ end }}</td>
-              <td>{{ if .IsDefault }}是{{ else }}否{{ end }}</td>
-              <td class="row-actions">
-                <button class="js-llm-test" data-id="{{ .ID }}">测试</button>
-                <button class="js-llm-edit" data-id="{{ .ID }}"
-                  data-name="{{ .Name }}" data-protocol="{{ .Protocol }}" data-endpoint="{{ .ApiEndpoint }}"
-                  data-model="{{ .Model }}" data-models="{{ join .Models "," }}" data-default="{{ if .IsDefault }}1{{ else }}0{{ end }}">编辑</button>
-                {{ if not .IsDefault }}<button class="js-llm-default" data-id="{{ .ID }}">设默认</button>{{ end }}
-                <button class="danger js-llm-del" data-id="{{ .ID }}">×</button>
-              </td>
-            </tr>
-          {{ end }}
-          </tbody>
-        </table>
-        {{ else }}
-        <p class="hint">还没有配置提供商。点下方按钮填入接口地址、密钥与模型后即可使用 AI 补料。</p>
-        {{ end }}
-        <div class="btn-row"><button class="primary" id="llmAdd">+ 添加提供商</button></div>
-      </div>
-
-      <div class="modal-mask" id="llmModal" style="display:none">
-        <div class="modal">
-          <div class="modal-head"><span id="llmModalTitle">添加提供商</span><button class="modal-x" id="llmClose">×</button></div>
-          <div class="modal-body">
-            <input type="hidden" id="llmId" value="0">
-            <label>名称</label><input id="llmName" placeholder="例如 OpenAI / 中转站 A">
-            <label>协议</label>
-            <select id="llmProtocol">
-              <option value="openai">OpenAI 兼容</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="gemini">Gemini</option>
-            </select>
-            <label>Base URL</label><input id="llmEndpoint" placeholder="https://api.openai.com/v1">
-            <label>API Key</label><input id="llmKey" type="password" placeholder="留空表示不修改">
-            <label>当前模型</label><input id="llmModel" placeholder="gpt-4o-mini">
-            <label>模型清单（逗号分隔）</label><input id="llmModels" placeholder="gpt-4o-mini,gpt-4o">
-            <label class="inline"><input type="checkbox" id="llmDefault"> 设为默认</label>
-            <div class="btn-row"><button class="primary" id="llmSave">保存</button><button id="llmCancel">取消</button></div>
-          </div>
+        <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <span>模型服务 <span class="badge manual" style="margin-left:6px">{{ len .LlmConfigs }}</span></span>
+          <button class="primary" onclick="openProvider(null)">+ 添加自定义提供商</button>
         </div>
+        <p class="hint">可添加多个 API 站点，每个站点可挂多个模型（可自定义任意模型名）；点卡片上的模型名可切换当前使用项。标记为默认的站点用于链接识别与批量补料。</p>
+
+        {{ if eq (len .LlmConfigs) 0 }}
+          <p class="hint" style="padding:18px 0">还没有配置，点击右上角添加。</p>
+        {{ else }}
+        <div class="provider-list">
+          {{ range $c := .LlmConfigs }}
+          <div class="provider-card{{ if $c.IsDefault }} on{{ end }}">
+            <div class="provider-main">
+              <div class="provider-name">
+                {{ $c.Name }}
+                <span class="proto-pill">{{ if $c.Protocol }}{{ $c.Protocol }}{{ else }}openai{{ end }}</span>
+                {{ if $c.IsDefault }}<span class="badge ai">默认</span>{{ end }}
+                {{ if not $c.IsConfigured }}<span class="badge manual">未完成</span>{{ end }}
+              </div>
+              <div class="provider-meta">{{ $c.ApiEndpoint }}</div>
+              <div class="provider-models">
+                {{ range $m := $c.Models }}
+                <button class="model-pill{{ if eq $m $c.Model }} on{{ end }}" title="设为当前模型"
+                  onclick="switchModel({{ $c.ID }},'{{ $m }}')">{{ $m }}</button>
+                {{ end }}
+              </div>
+            </div>
+            <div class="provider-actions">
+              <button onclick="testProvider({{ $c.ID }})">检测</button>
+              <button onclick="openProvider(this)" data-id="{{ $c.ID }}" data-name="{{ $c.Name }}" data-protocol="{{ $c.Protocol }}"
+                data-endpoint="{{ $c.ApiEndpoint }}" data-model="{{ $c.Model }}" data-models="{{ join $c.Models "," }}"
+                data-haskey="{{ if $c.HasApiKey }}1{{ else }}0{{ end }}"
+                data-retrypolicy="{{ $c.RetryPolicy }}" data-maxretries="{{ $c.MaxRetries }}"
+                data-retryon="{{ join $c.RetryOn "," }}"
+                data-default="{{ if $c.IsDefault }}1{{ else }}0{{ end }}">编辑</button>
+              {{ if not $c.IsDefault }}<button onclick="setDefaultProvider({{ $c.ID }})">设为默认</button>{{ end }}
+              <button class="danger" onclick="delProvider({{ $c.ID }})">×</button>
+            </div>
+          </div>
+          {{ end }}
+        </div>
+        {{ end }}
+        <p class="msg" id="llmMsg" style="display:none"></p>
       </div>
 
     {{ else if eq .View "account" }}
@@ -369,119 +401,339 @@
       </div>
 
       <div class="panel">
-        <div class="panel-title">双因素认证
+        <div class="panel-title">
+          两步验证（MFA）
           <span class="badge {{ if .MyMfa }}ai{{ else }}manual{{ end }}" style="margin-left:8px">{{ if .MyMfa }}已开启{{ else }}未开启{{ end }}</span>
         </div>
-        {{ if .MyMfa }}
-          <p class="hint">关闭后登录只需密码，安全性会下降。</p>
-          <div class="toolbar">
-            <input id="mfaDisableCode" placeholder="000000" maxlength="6" style="width:130px">
-            <button class="danger" id="mfaDisable">关闭 MFA</button>
+        <p class="hint">开启后登录需额外输入验证器 App 的 6 位动态码，显著提升账号安全性。</p>
+
+        {{ if not .MyMfa }}
+        <button class="primary" id="mfaEnableBtn" onclick="mfaStart()">开启 MFA</button>
+        <div class="mfa-setup" id="mfaSetup" style="display:none">
+          <p class="hint">1. 在验证器 App（Google Authenticator / Microsoft Authenticator 等）中手动添加账号，密钥如下：</p>
+          <div class="secret-box">
+            <code id="mfaSecret"></code>
+            <button type="button" onclick="copySecret()">复制</button>
           </div>
+          <p class="hint">2. 输入 App 显示的 6 位动态码完成绑定：</p>
+          <div class="toolbar" style="margin:0">
+            <input id="mfaCode" placeholder="000000" maxlength="6" style="width:130px">
+            <button class="primary" onclick="mfaConfirm()">确认开启</button>
+            <button onclick="mfaCancel()">取消</button>
+          </div>
+        </div>
         {{ else }}
-          <p class="hint">开启后登录需额外输入验证器 App 的 6 位动态码。</p>
-          <button class="primary" id="mfaStart">开启 MFA</button>
-          <div id="mfaSetupBox" style="display:none;margin-top:10px">
-            <p class="hint">1. 在验证器 App（Google / Microsoft Authenticator 等）中手动添加账号，密钥：</p>
-            <div class="secret-box"><code id="mfaSecret"></code></div>
-            <p class="hint">2. 输入 App 显示的 6 位动态码完成绑定：</p>
-            <div class="toolbar">
-              <input id="mfaVerifyCode" placeholder="000000" maxlength="6" style="width:130px">
-              <button class="primary" id="mfaVerify">确认开启</button>
-            </div>
-          </div>
+        <label>输入当前动态码以关闭</label>
+        <div class="toolbar" style="margin:0">
+          <input id="mfaCodeOff" placeholder="000000" maxlength="6" style="width:130px">
+          <button class="danger" onclick="mfaDisable()">关闭 MFA</button>
+        </div>
         {{ end }}
+        <p class="msg" id="mfaMsg" style="display:none"></p>
       </div>
 
       <div class="panel">
         <div class="panel-title">导出数据</div>
-        <p class="hint">导出链接、发布库、统计与说明（zip）。包内不含数据库口令、JWT 密钥、LLM Key 或密码哈希。</p>
-        <div class="toolbar">
-          <input id="exportPwd" type="password" placeholder="输入当前密码确认" autocomplete="current-password">
-          <button class="primary" id="exportPkg">生成并下载</button>
+        <p class="hint">导出链接、发布库、数量统计与部署/备份信息（zip）。包内不含数据库口令、JWT 密钥、LLM API Key 或用户密码。</p>
+        <label>输入当前账号密码以确认</label>
+        <input type="password" id="exportPwd" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')exportPackage()">
+        <div class="btn-row">
+          <button class="primary" id="exportPkgBtn" onclick="exportPackage()">生成并下载压缩包</button>
         </div>
+        <p class="msg" id="exportMsg" style="display:none"></p>
       </div>
 
       <div class="panel">
         <div class="panel-title">修改密码</div>
-        <label>当前密码</label><input id="oldPwd" type="password">
-        <label>新密码</label><input id="newPwd" type="password" placeholder="至少 8 位">
-        <label>确认新密码</label><input id="newPwd2" type="password">
-        <button class="primary" id="changePwd">保存</button>
-      </div>
-
-    {{ else }}
-      <div class="panel">
-        <div class="panel-title">{{ .Title }}</div>
-        <p class="hint">该模块正在迁移到 Go 渲染，暂时请使用 <a href="/console?view=publish">发布管理</a> 或 <a href="/console?view=dashboard">数据看板</a>。</p>
+        <label>当前密码</label>
+        <input type="password" id="oldPwd">
+        <label>新密码</label>
+        <input type="password" id="newPwd1" placeholder="至少 8 位">
+        <label>确认新密码</label>
+        <input type="password" id="newPwd2">
+        <button class="primary" id="pwdBtn" onclick="changePwd()">保存</button>
+        <p class="msg" id="pwdMsg" style="display:none"></p>
       </div>
     {{ end }}
+    </div>
+
+    <!-- ========== 发布库编辑/新建弹窗 ========== -->
+    <div class="modal-mask" id="libModal" style="display:none">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-head"><span id="libModalTitle">新建发布库</span><button class="modal-x" onclick="closeModal('libModal')">×</button></div>
+        <div class="modal-body">
+          <input type="hidden" id="libId" value="0">
+          <label>发布库名称</label>
+          <input id="libName" placeholder="例如：软件下载 / 内部工具">
+          <label>描述（可选）</label>
+          <input id="libDesc">
+          <div class="checks">
+            <label><input type="checkbox" id="libWeb" checked> 网页端可见</label>
+            <label><input type="checkbox" id="libClient" checked> 客户端可见</label>
+          </div>
+          <div class="btn-row">
+            <button class="primary" onclick="saveLib()">保存</button>
+            <button onclick="closeModal('libModal')">取消</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 链接新建/编辑弹窗（新建=批量草稿 wide，编辑=单条，与 .NET 版一致） ========== -->
+    <div class="modal-mask" id="linkModal" style="display:none">
+      <div class="modal" id="linkModalBox" onclick="event.stopPropagation()">
+        <div class="modal-head"><span id="linkModalTitle">新建链接</span><button class="modal-x" onclick="closeModal('linkModal')">×</button></div>
+        <div class="modal-body">
+          <datalist id="cat-group-list">{{ range .Cats.Groups }}<option value="{{ . }}"></option>{{ end }}</datalist>
+          <datalist id="cat-platform-list">{{ range .Cats.Platforms }}<option value="{{ . }}"></option>{{ end }}</datalist>
+          <datalist id="cat-tag-list">{{ range .Cats.Tags }}<option value="{{ . }}"></option>{{ end }}</datalist>
+          <input type="hidden" id="lfId" value="0">
+          <!-- 编辑模式：单条表单 -->
+          <div id="linkFormSingle">
+            <div class="form-2col">
+              <div><label>链接形式</label><select id="lfLinkType" onchange="toggleNetdiskRow()"><option value="">选择形式</option>{{ range .Cats.LinkTypes }}<option value="{{ . }}">{{ . }}</option>{{ end }}</select></div>
+              <div><label>分组（可多选）</label><input id="lfGroup" list="cat-group-list" placeholder="多个用逗号分隔"></div>
+            </div>
+            <div class="form-2col">
+              <div><label>名称</label><input id="lfTitle"></div>
+              <div><label>URL</label><input id="lfUrl" placeholder="https://"></div>
+            </div>
+            <div class="form-2col" id="lfNetdiskRow" style="display:none">
+              <div><label>网盘提取码</label><input id="lfExtractCode"></div>
+              <div><label>网盘过期时间</label><input id="lfExpireAt" placeholder="2026-12-31"></div>
+            </div>
+            <div class="form-2col">
+              <div><label>平台（可多选）</label><input id="lfPlatform" list="cat-platform-list" placeholder="多个用逗号分隔"></div>
+              <div><label>版本</label><input id="lfVersion"></div>
+            </div>
+            <label>标签（逗号分隔）</label>
+            <input id="lfTags" list="cat-tag-list" placeholder="多个标签用逗号分隔">
+            <label>备注</label>
+            <textarea id="lfRemark" rows="3" placeholder="可换行"></textarea>
+          </div>
+          <!-- 新建模式：批量草稿表格 -->
+          <div id="linkFormDrafts" style="display:none">
+            <div class="toolbar"><button type="button" onclick="addLinkDraft()">+ 新增一行</button><span class="hint">每行保存为一条链接；点击复制上一行后可逐项修改。</span></div>
+            <div class="link-draft-list">
+              <div class="draft-row draft-head">
+                <span></span><span>链接形式</span><span>名称</span><span>URL</span><span>分组</span><span>平台</span><span>标签</span><span>版本</span><span>备注</span><span>操作</span>
+              </div>
+              <div id="linkDraftsBody"></div>
+            </div>
+          </div>
+          <p class="msg err" id="lfMsg" style="display:none"></p>
+        </div>
+        <div class="modal-foot">
+          <button onclick="closeModal('linkModal')">取消</button>
+          <button class="primary" onclick="saveLink()">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 导入弹窗 ========== -->
+    <div class="modal-mask" id="importModal" style="display:none">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-head">
+          <span>导入链接 · {{ .CurLibName }}</span>
+          <button class="modal-x" onclick="closeModal('importModal')">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-tabs">
+            <button type="button" class="import-tab on" data-tab="paste" onclick="importTab('paste')">AI 接入</button>
+            <button type="button" class="import-tab" data-tab="excel" onclick="importTab('excel')">Excel 导入</button>
+          </div>
+          <p class="hint">导入到当前发布库「{{ .CurLibName }}」；导入完成后右侧列表会自动刷新。</p>
+
+          <div id="tabPaste">
+            <label>粘贴链接（每行一条，可附说明）</label>
+            <textarea id="pasteText" rows="8" placeholder="https://example.com/app.exe（每行一条，可附提取码等说明）"></textarea>
+            <div class="btn-row">
+              <button id="parseBtn" onclick="parsePaste()">识别预览</button>
+              <button class="primary" id="pasteImportBtn" onclick="importPaste()">确认导入</button>
+            </div>
+            <pre class="json" id="parseOut" style="display:none"></pre>
+          </div>
+
+          <div id="tabExcel" style="display:none">
+            <div class="import-excel">
+              <button type="button" class="link-btn" onclick="location.href='/api/admin/import/template'">↓ 下载导入模板</button>
+              <input type="file" id="excelFile" accept=".xlsx,.xls" onchange="showExcelFile(this)">
+              <p class="hint" id="excelFileHint" style="display:none"></p>
+              <button class="primary" id="excelBtn" onclick="importExcel()">上传并导入</button>
+              <p class="hint" style="margin:0">大文件在后台导入，可以关掉本弹窗，进度不会丢。</p>
+              <div class="import-progress" id="excelProgress" style="display:none">
+                <div class="ip-line"><span class="ip-dot"></span><b>导入进行中</b><span id="excelLine"></span></div>
+                <div class="ip-bar"><span id="excelBar"></span></div>
+                <button onclick="cancelExcel()">取消导入</button>
+              </div>
+            </div>
+          </div>
+
+          <p class="msg" id="importMsg" style="display:none"></p>
+        </div>
+        <div class="modal-foot"><button onclick="closeModal('importModal')">关闭</button></div>
+      </div>
+    </div>
+
+    <!-- ========== 去重弹窗 ========== -->
+    <div class="modal-mask" id="dedupeModal" style="display:none">
+      <div class="modal modal-sm" onclick="event.stopPropagation()">
+        <div class="modal-head"><span>链接去重</span><button class="modal-x" onclick="closeModal('dedupeModal')">×</button></div>
+        <div class="modal-body">
+          <div class="warn-box">按链接地址去重（忽略大小写、首尾空格和末尾斜杠），每组保留最早导入的一条，其余软删除。</div>
+          <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="dedupeAll"> 跨全部发布库（默认仅当前库）
+          </label>
+          <div class="dedupe-summary" id="dedupeSummary" style="display:none"></div>
+          <p class="msg err" id="dedupeMsg" style="display:none"></p>
+        </div>
+        <div class="modal-foot">
+          <button onclick="closeModal('dedupeModal')">取消</button>
+          <button id="dedupePreview" onclick="dedupePreview()">预览重复</button>
+          <button class="danger-solid" id="dedupeConfirm" onclick="dedupeRun()" disabled>确认去重</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== LLM 提供商弹窗 ========== -->
+    <div class="modal-mask" id="providerModal" style="display:none">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-head"><span id="providerTitle">添加自定义提供商</span><button class="modal-x" onclick="closeModal('providerModal')">×</button></div>
+        <div class="modal-body">
+          <input type="hidden" id="pfId" value="0">
+          <label>提供商名称</label>
+          <input id="pfName" placeholder="例如 OpenAI / 中转站 A">
+          <label>API 密钥</label>
+          <input id="pfKey" type="password" placeholder="sk-...">
+          <p class="hint" id="pfKeyHint" style="display:none">已保存密钥，留空表示不修改。</p>
+
+          <div class="form-section">端点设置</div>
+          <div class="form-2col">
+            <div>
+              <label>协议</label>
+              <select id="pfProtocol">
+                <option value="openai">OpenAI 兼容（Chat Completions）</option>
+                <option value="openai-responses">OpenAI Responses</option>
+                <option value="anthropic">Anthropic Messages</option>
+                <option value="gemini">Gemini</option>
+              </select>
+            </div>
+            <div><label>Base URL</label><input id="pfEndpoint" placeholder="https://api.openai.com/v1"></div>
+          </div>
+          <p class="hint">填到版本路径即可，保存后自动拼接请求路径。</p>
+
+          <div class="form-section model-section-head">
+            <span>模型列表（可添加多个，点选当前使用）</span>
+            <button type="button" class="fetch-models" id="pfFetchBtn" onclick="fetchModels()">获取可用模型</button>
+          </div>
+          <div class="model-editor" id="pfModelChips"><span class="hint" style="margin:0">还没有模型，在下方输入后点「添加模型」</span></div>
+          <div class="model-add">
+            <input id="pfNewModel" list="llm-model-presets" onkeydown="if(event.key==='Enter'){event.preventDefault();addModel()}" placeholder="输入或选择模型名，例如 gpt-4o-mini">
+            <button type="button" onclick="addModel()">+ 添加模型</button>
+          </div>
+          <p class="hint">模型名可任意自定义；同一站点可挂多个模型，随时切换当前使用项。</p>
+          <div class="model-catalog" id="pfModelCatalog" style="display:none">
+            <div class="mc-head">
+              <span id="pfCatalogCount">站点可用模型 0</span>
+              <button type="button" onclick="addAllFetched()">全部添加</button>
+            </div>
+            <div class="mc-list" id="pfCatalogList"></div>
+          </div>
+          <p class="msg" id="pfModelsMsg" style="display:none"></p>
+          <datalist id="llm-model-presets">
+            <option value="gpt-4o-mini"></option><option value="gpt-4o"></option>
+            <option value="claude-3-5-sonnet-latest"></option><option value="gemini-1.5-flash"></option>
+            <option value="deepseek-chat"></option><option value="deepseek-reasoner"></option>
+            <option value="qwen-plus"></option><option value="moonshot-v1-8k"></option>
+            <option value="glm-4-flash"></option>
+          </datalist>
+
+          <div class="form-section">重试设置</div>
+          <div class="form-2col">
+            <div>
+              <label>重试策略</label>
+              <select id="pfRetryPolicy">
+                <option value="default">默认（仅临时错误）</option>
+                <option value="transient">仅临时错误</option>
+                <option value="all">所有错误</option>
+              </select>
+            </div>
+            <div><label>最大重试次数</label><input type="number" id="pfMaxRetries" min="0" max="10" value="8"></div>
+          </div>
+          <label>错误类型</label>
+          <div class="retry-grid">
+            <label><input type="checkbox" class="pf-retry" value="empty" checked> 空响应</label>
+            <label><input type="checkbox" class="pf-retry" value="format"> 响应格式错误</label>
+            <label><input type="checkbox" class="pf-retry" value="quota"> 配额已用尽</label>
+            <label><input type="checkbox" class="pf-retry" value="rate_limit" checked> 请求限流</label>
+            <label><input type="checkbox" class="pf-retry" value="server" checked> 服务器错误</label>
+            <label><input type="checkbox" class="pf-retry" value="stream_end"> 流提前结束</label>
+            <label><input type="checkbox" class="pf-retry" value="timeout" checked> 超时</label>
+            <label><input type="checkbox" class="pf-retry" value="network" checked> 网络错误</label>
+          </div>
+          <p class="hint">「默认」用内置临时错误集合；「仅临时错误」按上面勾选；「所有错误」不区分类型。</p>
+
+          <div class="checks">
+            <label><input type="checkbox" id="pfDefault"> 设为默认配置</label>
+          </div>
+
+          <div class="form-section">从预设创建（可选）</div>
+          <select id="pfPreset" onchange="applyProviderPreset(this.value)">
+            <option value="">选择预设…</option>
+            <option value="openai">OpenAI</option><option value="anthropic">Anthropic</option>
+            <option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option>
+            <option value="qwen">通义千问</option><option value="moonshot">Kimi 月之暗面</option>
+            <option value="zhipu">智谱 GLM</option><option value="siliconflow">硅基流动</option>
+          </select>
+
+          <p class="msg err" id="pfMsg" style="display:none"></p>
+          <p class="msg" id="pfTestMsg" style="display:none"></p>
+        </div>
+        <div class="modal-foot">
+          <button onclick="closeModal('providerModal')">取消</button>
+          <button id="pfTestBtn" onclick="testProviderForm()">检测</button>
+          <button class="primary" id="pfSaveBtn" onclick="saveProvider()">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 删除发布库：密码二次确认弹窗（与 .NET 版一致） ========== -->
+    <div class="modal-mask" id="libDelModal" style="display:none">
+      <div class="modal modal-sm" onclick="event.stopPropagation()">
+        <div class="modal-head"><span>删除发布库</span><button class="modal-x" onclick="closeModal('libDelModal')">×</button></div>
+        <div class="modal-body">
+          <div class="warn-box" id="libDelWarn"></div>
+          <label>输入当前账号密码以确认</label>
+          <input type="password" id="libDelPwd" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')confirmLibDelete()">
+          <p class="msg err" id="libDelMsg" style="display:none"></p>
+        </div>
+        <div class="modal-foot">
+          <button onclick="closeModal('libDelModal')">取消</button>
+          <button class="danger-solid" id="libDelConfirm" onclick="confirmLibDelete()">确认删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 通用确认/重命名弹窗 ========== -->
+    <div class="modal-mask" id="askModal" style="display:none">
+      <div class="modal modal-sm" onclick="event.stopPropagation()">
+        <div class="modal-head"><span id="askTitle"></span><button class="modal-x" onclick="closeModal('askModal')">×</button></div>
+        <div class="modal-body">
+          <div class="warn-box" id="askMessage"></div>
+          <div id="askRenameBox" style="display:none">
+            <label>输入新名称</label>
+            <input id="askValue" placeholder="新名称">
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button onclick="closeModal('askModal')">取消</button>
+          <button class="primary" id="askConfirm">确认</button>
+        </div>
+      </div>
     </div>
   </main>
 </div>
 
-
-
-      <div class="modal-mask" id="importModal" style="display:none">
-        <div class="modal" style="max-width:640px">
-          <div class="modal-head">
-            <span>导入链接 · {{ .CurLibName }}</span>
-            <button class="modal-x" id="importClose">×</button>
-          </div>
-          <div class="modal-body">
-            <div class="modal-tabs">
-              <button type="button" class="import-tab on" data-tab="paste">粘贴 / AI 识别</button>
-              <button type="button" class="import-tab" data-tab="excel">Excel 导入</button>
-            </div>
-            <p class="hint">导入到当前发布库「{{ .CurLibName }}」；完成后右侧列表会自动刷新。</p>
-
-            <div id="tabPaste">
-              <label>粘贴链接（每行一条，可附提取码等说明）</label>
-              <textarea id="pasteText" rows="8" placeholder="https://example.com/app.exe&#10;https://pan.example.com/s/abc 提取码：x7k2"></textarea>
-              <div class="btn-row">
-                <button type="button" id="parseBtn">识别预览</button>
-                <button type="button" class="primary" id="pasteImportBtn">确认导入</button>
-              </div>
-              <pre class="json" id="parseOut" style="display:none"></pre>
-            </div>
-
-            <div id="tabExcel" style="display:none">
-              <div class="import-excel">
-                <a class="btn-like" href="/api/admin/import/template">↓ 下载导入模板</a>
-                <input type="file" id="excelFile" accept=".xlsx,.xls">
-                <button type="button" class="primary" id="excelBtn">上传并导入</button>
-                <p class="hint" style="margin:0">大文件在后台导入，可以关掉本弹窗，进度不会丢。</p>
-                <div class="import-progress" id="excelProgress" style="display:none">
-                  <div class="ip-line"><span class="ip-dot"></span><b>导入进行中</b><span id="excelLine"></span></div>
-                  <div class="ip-bar"><span id="excelBar"></span></div>
-                  <button type="button" id="excelCancel">取消导入</button>
-                </div>
-              </div>
-            </div>
-
-            <p class="msg" id="importMsg" style="display:none"></p>
-          </div>
-          <div class="modal-foot"><button type="button" id="importClose2">关闭</button></div>
-        </div>
-      </div>
-
-      <div class="modal-mask" id="libModal" style="display:none">
-        <div class="modal">
-          <div class="modal-head"><span id="libModalTitle">新建发布库</span><button class="modal-x" id="libClose">×</button></div>
-          <div class="modal-body">
-            <input type="hidden" id="libId" value="0">
-            <label>名称</label><input id="libName" placeholder="例如：软件下载 / 内部工具">
-            <label>描述</label><input id="libDesc" placeholder="可选">
-            <label>排序</label><input id="libSort" type="number" value="0">
-            <div class="checks">
-              <label><input type="checkbox" id="libWeb" checked> 网页端可见</label>
-              <label><input type="checkbox" id="libClient" checked> 客户端可见</label>
-            </div>
-            <div class="btn-row"><button class="primary" id="libSave">保存</button><button id="libCancel">取消</button></div>
-          </div>
-        </div>
-      </div>
-
-<script src="/console/assets/admin.js"></script>
+<script src="/console/assets/admin.js?v=3"></script>
 </body>
 </html>

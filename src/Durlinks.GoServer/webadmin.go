@@ -18,14 +18,22 @@ var adminTemplate = template.Must(template.New("admin.html").Funcs(template.Func
 	"ptr":  func(p *string) string { return ptrStr(p) },
 	"isAI": func(s ImportSource) bool { return s == ImportAI },
 	"join": strings.Join,
+	"sub":  func(a, b int) int { return a - b },
+	// yyyy-MM-dd（与 C# 的 CreatedAt.ToString("yyyy-MM-dd") 一致）
+	"date": func(v string) string {
+		if len(v) >= 10 {
+			return v[:10]
+		}
+		return v
+	},
 }).ParseFS(adminAssets, "webadmin/templates/admin.html"))
 
 var navTitles = map[string]string{
 	"dashboard":  "数据看板",
 	"publish":    "发布管理",
 	"categories": "分组管理",
-	"users":      "用户",
-	"llm":        "大模型",
+	"users":      "用户管理",
+	"llm":        "LLM 设置",
 	"account":    "账号设置",
 }
 
@@ -63,15 +71,44 @@ type adminData struct {
 
 	BackQuery string
 
-	CatKind      string
-	CatValues    []string
-	CatCount     int
+	CatKind     string
+	CatTitle    string
+	CatValues   []string
+	CatCount    int
+	CatSections []catSection
+	CatFolded   bool
+	CatFoldNext string
+
+	LibFolded    bool
+	FoldNext     string
+	PageNums     []int
 	Users        []UserDto
 	MyMfa        bool
 	LlmConfigs   []LlmConfigDto
 	IsSuperAdmin bool
 
+	// 发布库就地新建/编辑（与 .NET 版一致：编辑在原卡片展开，新建在列表下方）
+	LibEditing bool
+	LibEditID  int
+	LibNew     bool
+
 	base url.Values
+}
+
+// catSection 分组管理左侧「分类」卡片。
+type catSection struct {
+	Kind     string
+	Title    string
+	Count    int
+	Selected int
+}
+
+// Num 读统计值（模板里避免 nil map 报错）。
+func (d adminData) Num(key string) int {
+	if d.Stats == nil {
+		return 0
+	}
+	return d.Stats[key]
 }
 
 // Link 同用户端：保留当前查询参数，按需覆盖（值 0/空 表示删除该参数）。
@@ -172,6 +209,13 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 			kind = "group"
 		}
 		data.CatKind = kind
+		data.CatFolded = qs.Get("cfold") == "1"
+		data.CatFoldNext = "0"
+		if data.CatFolded {
+			data.CatFoldNext = "0"
+		} else {
+			data.CatFoldNext = "1"
+		}
 		if cats, err := a.categoryOptions(); err == nil {
 			data.Cats = cats
 			switch kind {
@@ -185,6 +229,17 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 				data.CatValues = cats.Groups
 			}
 			data.CatCount = len(data.CatValues)
+			data.CatSections = []catSection{
+				{Kind: "group", Title: "分组", Count: len(cats.Groups)},
+				{Kind: "platform", Title: "平台", Count: len(cats.Platforms)},
+				{Kind: "type", Title: "链接形式", Count: len(cats.LinkTypes)},
+				{Kind: "tag", Title: "标签", Count: len(cats.Tags)},
+			}
+			for _, cs := range data.CatSections {
+				if cs.Kind == kind {
+					data.CatTitle = cs.Title
+				}
+			}
 		}
 
 	case "users":
@@ -236,18 +291,30 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Libs = libs
+		data.LibFolded = qs.Get("fold") == "1"
+		data.FoldNext = "1"
+		if data.LibFolded {
+			data.FoldNext = "0"
+		}
+		// 就地新建/编辑：编辑在原卡片展开，新建在列表下方（对应 C# 的 libFormOpen/libEditing）
+		data.LibEditID = queryInt(r, "libedit", 0)
+		data.LibEditing = data.LibEditID > 0
+		data.LibNew = qs.Get("libnew") == "1"
+		// 与 C# 一致：始终落在某一个库上，没有「全部发布库」这种入口
 		data.CurLib = queryInt(r, "lib", 0)
-		data.CurLibName = "全部发布库"
+		if data.CurLib == 0 && len(libs) > 0 {
+			data.CurLib = libs[0].ID
+		}
 		for _, lb := range libs {
 			if lb.ID == data.CurLib {
 				data.CurLibName = lb.Name
 				break
 			}
 		}
-
+		libPtr := data.CurLib
 		lq := LinkQuery{
 			Q: data.Q, Channel: "web", Page: page, PageSize: size,
-			LibraryID: queryIntPtr(r, "lib"),
+			LibraryID: &libPtr,
 		}
 		if data.Src == "0" || data.Src == "1" {
 			if n, err := strconv.Atoi(data.Src); err == nil {
@@ -272,6 +339,10 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 		}
 		data.PrevPage = page - 1
 		data.NextPage = page + 1
+		data.PageNums = make([]int, 0, data.MaxPage)
+		for p := 1; p <= data.MaxPage; p++ {
+			data.PageNums = append(data.PageNums, p)
+		}
 
 		if cats, err := a.categoryOptions(); err == nil {
 			data.Cats = cats
