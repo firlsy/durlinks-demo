@@ -37,23 +37,23 @@ func (a *App) handleExportPackage(w http.ResponseWriter, r *http.Request) {
 
 	items, err := a.collectAllLinks(200000, nil)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	xlsxBlob, err := a.buildLinksXLSX(items)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 
 	libs, err := a.queryLibrariesForExport()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	stats, err := a.queryStatsMap()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 

@@ -96,6 +96,57 @@ func (l *loginLimiter) success(key string) {
 	l.mu.Unlock()
 }
 
+// queryLimiter 简单的按 key 限频器，用于匿名可访问的查询接口（如 mfa/check），
+// 防止用户枚举。窗口内超过上限即拒绝，超限后不锁定而是等窗口滑过。
+type queryLimiter struct {
+	mu      sync.Mutex
+	data    map[string]*queryWindow
+	window  time.Duration
+	maxHits int
+	lastGC  time.Time
+}
+
+type queryWindow struct {
+	count   int
+	firstAt time.Time
+}
+
+func newQueryLimiter(window time.Duration, maxHits int) *queryLimiter {
+	return &queryLimiter{data: map[string]*queryWindow{}, window: window, maxHits: maxHits}
+}
+
+// allow 原子地消耗一次配额，未超限返回 true。
+func (q *queryLimiter) allow(key string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	now := time.Now()
+	// 周期性清理，防止 map 被海量不同 key 撑爆
+	if now.Sub(q.lastGC) > time.Minute {
+		for k, w := range q.data {
+			if now.Sub(w.firstAt) > q.window {
+				delete(q.data, k)
+			}
+		}
+		q.lastGC = now
+		if len(q.data) > 20000 {
+			for k := range q.data {
+				delete(q.data, k)
+				break
+			}
+		}
+	}
+	w, ok := q.data[key]
+	if !ok || now.Sub(w.firstAt) > q.window {
+		q.data[key] = &queryWindow{count: 1, firstAt: now}
+		return true
+	}
+	if w.count >= q.maxHits {
+		return false
+	}
+	w.count++
+	return true
+}
+
 func (l *loginLimiter) gcLocked(now time.Time) {
 	if now.Sub(l.lastGC) < time.Minute && len(l.data) < loginMaxEntries {
 		return

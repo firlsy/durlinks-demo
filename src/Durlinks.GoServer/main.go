@@ -24,6 +24,7 @@ type App struct {
 	auth         *Auth
 	captcha      *CaptchaStore
 	loginGuard   *loginLimiter
+	mfaGuard     *queryLimiter
 	cfg          *Config
 	baseDir      string
 	webMode      string
@@ -35,6 +36,28 @@ type App struct {
 }
 
 func (a *App) logf(format string, args ...any) { log.Printf(format, args...) }
+
+// writeInternalErr 统一处理 500：真实错误只写服务器日志，对外返回固定文案，
+// 避免把数据库引擎、表名、连接地址、文件路径等内部细节泄露给客户端。
+func writeInternalErr(w http.ResponseWriter, err error) {
+	log.Printf("[internal] %v", err)
+	writeErr(w, http.StatusInternalServerError, "服务器内部错误")
+}
+
+// cookieSecure 判断认证 cookie 是否应带 Secure 标志。
+// 直连 TLS 或显式配置 CookieSecure 时为 true；反代场景信任 X-Forwarded-Proto。
+func (a *App) cookieSecure(r *http.Request) bool {
+	if a.cfg != nil && a.cfg.Security.CookieSecure {
+		return true
+	}
+	if r.TLS != nil {
+		return true
+	}
+	if a.cfg != nil && a.cfg.Security.BehindProxy {
+		return strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
+	}
+	return false
+}
 
 func claimsFrom(r *http.Request) *JWTClaims {
 	if v, ok := r.Context().Value(claimsKey).(*JWTClaims); ok {
@@ -114,6 +137,7 @@ func main() {
 		auth:         NewAuth(secret),
 		captcha:      NewCaptchaStore(),
 		loginGuard:   newLoginLimiter(),
+		mfaGuard:     newQueryLimiter(10*time.Minute, 30),
 		cfg:          cfg,
 		webMode:      cfg.Web.Mode,
 		adminWebMode: cfg.Web.AdminMode,
@@ -254,7 +278,7 @@ func (a *App) authMiddleware(next http.Handler) http.Handler {
 		// 避免「账号被删/降权/改密后旧令牌继续可用」。
 		u, err := a.findUserByUsername(claims.UniqueName)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		if u == nil || u.TokenVersion != claims.TokenVersion {

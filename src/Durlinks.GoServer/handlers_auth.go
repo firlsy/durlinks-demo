@@ -47,7 +47,7 @@ func (a *App) handleCaptchaImage(w http.ResponseWriter, r *http.Request) {
 		Value:    id,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   a.cookieSecure(r),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   300,
 	})
@@ -57,11 +57,16 @@ func (a *App) handleCaptchaImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleMfaCheck(w http.ResponseWriter, r *http.Request) {
+	// 匿名可访问，按 IP 限频，防止遍历用户名枚举 MFA 开启状态
+	if !a.mfaGuard.allow(clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "查询过于频繁，请稍后再试")
+		return
+	}
 	username := strings.TrimSpace(r.URL.Query().Get("username"))
 	var n int
 	err := a.db.sql.QueryRow(a.db.Rebind(`SELECT COUNT(*) FROM "Users" WHERE "Username" = ? AND "MfaEnabled" = `+a.db.True()), username).Scan(&n)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, MfaCheckDto{MfaEnabled: n > 0})
@@ -100,7 +105,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	user, err := a.findUserByUsername(strings.TrimSpace(req.Username))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if user == nil || !VerifyPassword(req.Password, user.PasswordHash) {
@@ -130,7 +135,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// API 请求仍走 Bearer token，两套凭证共享同一个 TokenVersion。
 	http.SetCookie(w, &http.Cookie{
 		Name: authCookieName, Value: tokenStr, Path: "/", HttpOnly: true,
-		SameSite: http.SameSiteStrictMode, MaxAge: 12 * 3600, Secure: r.TLS != nil,
+		SameSite: http.SameSiteStrictMode, MaxAge: 12 * 3600, Secure: a.cookieSecure(r),
 	})
 	writeOK(w, LoginResponse{
 		Token:       tokenStr,
@@ -149,7 +154,7 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := a.findUserByUsername(claims.UniqueName)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	mfa := false
@@ -192,7 +197,7 @@ func (a *App) handleMfaDisable(w http.ResponseWriter, r *http.Request) {
 	// MFA 状态变更后 TokenVersion+1：开启前签发的旧 token 立即失效，避免 MFA 形同虚设
 	_, err = a.db.sql.Exec(a.db.Rebind(`UPDATE "Users" SET "MfaEnabled" = ?, "MfaSecret" = NULL, "TokenVersion" = "TokenVersion" + 1 WHERE "Id" = ?`), a.db.BoolValue(false), user.ID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]string{"message": "MFA 已关闭"})
@@ -225,7 +230,7 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	// 密码变更后 TokenVersion+1：所有已签发的旧 JWT 立即失效
 	res, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Users" SET "PasswordHash" = ?, "TokenVersion" = "TokenVersion" + 1 WHERE "Id" = ?`), HashPassword(dto.NewPassword), user.ID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -252,7 +257,7 @@ func (a *App) handleMfaSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	secret := GenerateMfaSecret()
 	if _, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Users" SET "MfaSecret" = ? WHERE "Id" = ?`), secret, user.ID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, MfaSetupDto{Secret: secret, QrURI: BuildOtpAuthURI(user.Username, secret)})
@@ -282,7 +287,7 @@ func (a *App) handleMfaVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	// MFA 开启后 TokenVersion+1：开启前签发的旧 token 立即失效
 	if _, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Users" SET "MfaEnabled" = ?, "TokenVersion" = "TokenVersion" + 1 WHERE "Id" = ?`), a.db.BoolValue(true), user.ID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]string{"message": "MFA 已开启"})
@@ -291,7 +296,7 @@ func (a *App) handleMfaVerify(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := a.db.sql.Query(`SELECT "Id","Username","Role","MfaEnabled","CreatedAt" FROM "Users" ORDER BY "Id"`)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer rows.Close()
@@ -304,7 +309,7 @@ func (a *App) handleListUsers(w http.ResponseWriter, r *http.Request) {
 			createdAt any
 		)
 		if err := rows.Scan(&id, &username, &role, &mfa, &createdAt); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		out = append(out, UserDto{
@@ -337,14 +342,14 @@ func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		err := a.db.sql.QueryRow(a.db.Rebind(`INSERT INTO "Users" ("Username","PasswordHash","Role","MfaSecret","MfaEnabled","CreatedAt") VALUES (?,?,?,?,?,?) RETURNING "Id"`),
 			strings.TrimSpace(req.Username), HashPassword(req.Password), int(RoleAdmin), nil, a.db.BoolValue(false), now).Scan(&id)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	} else {
 		res, err := a.db.sql.Exec(a.db.Rebind(`INSERT INTO "Users" ("Username","PasswordHash","Role","MfaSecret","MfaEnabled","CreatedAt") VALUES (?,?,?,?,?,?)`),
 			strings.TrimSpace(req.Username), HashPassword(req.Password), int(RoleAdmin), nil, a.db.BoolValue(false), now)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		last, _ := res.LastInsertId()

@@ -29,7 +29,7 @@ func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, q := range queries {
 		if err := a.db.sql.QueryRow(q.sql).Scan(q.dst); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
@@ -44,7 +44,7 @@ func (a *App) handleAdminLinks(w http.ResponseWriter, r *http.Request) {
 	q := parseLinkQuery(r)
 	items, total, err := a.db.queryLinks(q, false)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	page := max(1, q.Page)
@@ -70,7 +70,7 @@ func (a *App) handleSetHidden(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Links" SET "IsHidden" = ? WHERE "Id" = ? AND "IsDeleted" = `+a.db.False()), a.db.BoolValue(dto.Hidden), id)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -89,7 +89,7 @@ func (a *App) handleSoftDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "Links" SET "IsDeleted" = ? WHERE "Id" = ? AND "IsDeleted" = `+a.db.False()), a.db.BoolValue(true), id)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -107,7 +107,7 @@ func (a *App) handleBatchHidden(w http.ResponseWriter, r *http.Request) {
 	}
 	affected, err := a.execOnIDs(dto.IDs, `UPDATE "Links" SET "IsHidden" = ? WHERE "IsDeleted" = `+a.db.False()+` AND "Id" IN (%s)`, a.db.BoolValue(dto.Hidden))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]any{"affected": affected, "hidden": dto.Hidden})
@@ -121,7 +121,7 @@ func (a *App) handleBatchDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	affected, err := a.execOnIDs(dto.IDs, `UPDATE "Links" SET "IsDeleted" = ? WHERE "IsDeleted" = `+a.db.False()+` AND "Id" IN (%s)`, a.db.BoolValue(true))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]any{"affected": affected, "deleted": true})
@@ -168,7 +168,7 @@ func (a *App) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 	}
 	libID, err := a.db.resolveLibraryID(dto.LibraryID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if libID == nil {
@@ -177,7 +177,7 @@ func (a *App) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 	}
 	maxSort, err := a.db.maxSortOrder(*libID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 
@@ -199,7 +199,7 @@ func (a *App) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := a.db.sql.Begin()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer tx.Rollback()
@@ -210,21 +210,21 @@ func (a *App) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 		Remark: dto.Remark, Summary: dto.Summary, ImportSource: ImportManual, LibraryID: libID,
 	})
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if urlText != "" {
 		if _, err := tx.Exec(a.db.Rebind(`INSERT INTO "LinkUrls" ("LinkId","Url","SortOrder") VALUES (?,?,?)`), newID, urlText, 0); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
 	if err := a.replaceTags(tx, newID, dto.Tags); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]int{"id": newID})
@@ -313,14 +313,14 @@ func (a *App) handleUpdateLink(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := a.db.sql.Begin()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer tx.Rollback()
 
 	var exists int
 	if err := tx.QueryRow(a.db.Rebind(`SELECT COUNT(*) FROM "Links" WHERE "Id" = ? AND "IsDeleted" = `+a.db.False()), id).Scan(&exists); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if exists == 0 {
@@ -337,7 +337,7 @@ func (a *App) handleUpdateLink(w http.ResponseWriter, r *http.Request) {
 	if dto.LibraryID != nil {
 		libID, err := a.db.resolveLibraryID(dto.LibraryID)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		if libID == nil {
@@ -384,12 +384,12 @@ func (a *App) handleUpdateLink(w http.ResponseWriter, r *http.Request) {
 		}
 		add("Url", u)
 		if _, err := tx.Exec(a.db.Rebind(`DELETE FROM "LinkUrls" WHERE "LinkId" = ?`), id); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		if u != "" {
 			if _, err := tx.Exec(a.db.Rebind(`INSERT INTO "LinkUrls" ("LinkId","Url","SortOrder") VALUES (?,?,?)`), id, u, 0); err != nil {
-				writeErr(w, http.StatusInternalServerError, err.Error())
+				writeInternalErr(w, err)
 				return
 			}
 		}
@@ -397,18 +397,18 @@ func (a *App) handleUpdateLink(w http.ResponseWriter, r *http.Request) {
 	if len(sets) > 0 {
 		args = append(args, id)
 		if _, err := tx.Exec(a.db.Rebind(`UPDATE "Links" SET `+strings.Join(sets, ", ")+` WHERE "Id" = ?`), args...); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
 	if dto.Tags != nil {
 		if err := a.replaceTags(tx, id, dto.Tags); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]string{"message": "已保存"})
@@ -431,7 +431,7 @@ func (a *App) handleMoveLinks(w http.ResponseWriter, r *http.Request) {
 	}
 	target, err := a.db.resolveLibraryID(&req.TargetLibraryID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if target == nil {
@@ -441,7 +441,7 @@ func (a *App) handleMoveLinks(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := a.db.sql.Begin()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer tx.Rollback()
@@ -451,7 +451,7 @@ func (a *App) handleMoveLinks(w http.ResponseWriter, r *http.Request) {
 	allInTarget := true
 	rows, err := tx.Query(a.db.Rebind(`SELECT "Id","LibraryId" FROM "Links" WHERE "IsDeleted" = `+a.db.False()+` AND "Id" IN (`+ph+`)`), intsToArgs(req.IDs)...)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	var ids []int
@@ -485,12 +485,12 @@ func (a *App) handleMoveLinks(w http.ResponseWriter, r *http.Request) {
 		args = args[:0]
 		args = append(args, *target, next, id)
 		if _, err := tx.Exec(a.db.Rebind(`UPDATE "Links" SET "LibraryId" = ?, "SortOrder" = ? WHERE "Id" = ?`), args...); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]int{"moved": len(ids)})
@@ -513,7 +513,7 @@ func (a *App) handleCopyLinks(w http.ResponseWriter, r *http.Request) {
 	}
 	target, err := a.db.resolveLibraryID(&req.TargetLibraryID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if target == nil {
@@ -523,7 +523,7 @@ func (a *App) handleCopyLinks(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := a.db.sql.Begin()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer tx.Rollback()
@@ -532,7 +532,7 @@ func (a *App) handleCopyLinks(w http.ResponseWriter, r *http.Request) {
 	rows, err := tx.Query(a.db.Rebind(`SELECT "Id","SortOrder","LinkType","GroupName","Title","Url","ExtractCode","ExpireAt","Platform","Version","Remark","Summary","ImportSource","IsHidden","IsDeleted"
 		FROM "Links" WHERE "IsDeleted" = `+a.db.False()+` AND "Id" IN (`+ph+`)`), intsToArgs(req.IDs)...)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	var srcs []*Link
@@ -547,7 +547,7 @@ func (a *App) handleCopyLinks(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&l.ID, &l.SortOrder, &l.LinkType, &l.GroupName, &l.Title, &l.URL,
 			&extract, &expire, &platform, &version, &remark, &summary, &importSource, &isHidden, &isDeleted); err != nil {
 			rows.Close()
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		l.ExtractCode = nullableString(extract)
@@ -577,17 +577,17 @@ func (a *App) handleCopyLinks(w http.ResponseWriter, r *http.Request) {
 		cp.LibraryID = target
 		newID, err := a.insertLink(tx, &cp)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		// 深拷贝 URL / 附属链接 / 标签
 		if err := copyChildren(tx, src.ID, newID, a); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]int{"copied": len(srcs)})
@@ -660,7 +660,7 @@ func (a *App) handleImportLinks(w http.ResponseWriter, r *http.Request) {
 	}
 	libID, err := a.db.resolveLibraryID(queryIntPtr(r, "libraryId"))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if libID == nil {
@@ -670,7 +670,7 @@ func (a *App) handleImportLinks(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := a.db.sql.Begin()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer tx.Rollback()
@@ -706,22 +706,22 @@ func (a *App) handleImportLinks(w http.ResponseWriter, r *http.Request) {
 			ImportSource: ImportAI, LibraryID: libID,
 		})
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		if urlText != "" {
 			if _, err := tx.Exec(a.db.Rebind(`INSERT INTO "LinkUrls" ("LinkId","Url","SortOrder") VALUES (?,?,?)`), id, urlText, 0); err != nil {
-				writeErr(w, http.StatusInternalServerError, err.Error())
+				writeInternalErr(w, err)
 				return
 			}
 		}
 		if err := a.replaceTags(tx, id, item.Tags); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]any{"imported": count, "source": "AI接入"})
@@ -748,7 +748,7 @@ func (a *App) handleDedupe(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := a.db.sql.Query(a.db.Rebind(`SELECT "Id","Url","Title","LibraryId" FROM "Links" WHERE `+cond), args...)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	type row struct {
@@ -834,7 +834,7 @@ func (a *App) handleDedupe(w http.ResponseWriter, r *http.Request) {
 	if len(toRemove) > 0 {
 		removed, err := a.execOnIDs(toRemove, `UPDATE "Links" SET "IsDeleted" = ? WHERE "IsDeleted" = `+a.db.False()+` AND "Id" IN (%s)`, a.db.BoolValue(true))
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		result.Removed = removed

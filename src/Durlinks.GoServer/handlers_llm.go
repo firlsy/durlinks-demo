@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io"
@@ -172,7 +173,7 @@ func (a *App) getLlmConfig(id int) (*LlmConfig, error) {
 func (a *App) handleListLlmConfigs(w http.ResponseWriter, r *http.Request) {
 	list, err := a.queryLlmConfigs(` ORDER BY "IsDefault" DESC, "Id"`)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	out := make([]LlmConfigDto, 0, len(list))
@@ -186,7 +187,7 @@ func (a *App) handleListLlmConfigs(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleGetLlmConfig(w http.ResponseWriter, r *http.Request) {
 	list, err := a.queryLlmConfigs(` ORDER BY "IsDefault" DESC, "Id"`)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	var chosen *LlmConfig
@@ -218,7 +219,7 @@ func (a *App) handleSaveLlmConfig(w http.ResponseWriter, r *http.Request) {
 	if !isNew {
 		existing, err := a.getLlmConfig(dto.ID)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		if existing == nil {
@@ -295,7 +296,7 @@ func (a *App) handleSaveLlmConfig(w http.ResponseWriter, r *http.Request) {
 				cur.Name, cur.Protocol, cur.RetryPolicy, cur.MaxRetries, cur.RetryOn, cur.ApiEndpoint, cur.ApiKey,
 				cur.Model, cur.ModelsJson, a.db.BoolValue(cur.IsConfigured), a.db.BoolValue(cur.IsDefault), now).Scan(&id)
 			if err != nil {
-				writeErr(w, http.StatusInternalServerError, err.Error())
+				writeInternalErr(w, err)
 				return
 			}
 		} else {
@@ -305,7 +306,7 @@ func (a *App) handleSaveLlmConfig(w http.ResponseWriter, r *http.Request) {
 				cur.Name, cur.Protocol, cur.RetryPolicy, cur.MaxRetries, cur.RetryOn, cur.ApiEndpoint, cur.ApiKey,
 				cur.Model, cur.ModelsJson, a.db.BoolValue(cur.IsConfigured), a.db.BoolValue(cur.IsDefault), now)
 			if err != nil {
-				writeErr(w, http.StatusInternalServerError, err.Error())
+				writeInternalErr(w, err)
 				return
 			}
 			last, _ := res.LastInsertId()
@@ -318,7 +319,7 @@ func (a *App) handleSaveLlmConfig(w http.ResponseWriter, r *http.Request) {
 			cur.Name, cur.Protocol, cur.RetryPolicy, cur.MaxRetries, cur.RetryOn, cur.ApiEndpoint, cur.ApiKey,
 			cur.Model, cur.ModelsJson, a.db.BoolValue(cur.IsConfigured), a.db.BoolValue(cur.IsDefault), now, id)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
@@ -347,7 +348,7 @@ func (a *App) handleDeleteLlmConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := a.getLlmConfig(id)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if c == nil {
@@ -356,7 +357,7 @@ func (a *App) handleDeleteLlmConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	wasDefault := c.IsDefault
 	if _, err := a.db.sql.Exec(a.db.Rebind(`DELETE FROM "LlmConfigs" WHERE "Id" = ?`), id); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if wasDefault {
@@ -385,7 +386,7 @@ func (a *App) handleSetDefaultLlmConfig(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if _, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "LlmConfigs" SET "IsDefault" = ? WHERE "Id" = ?`), a.db.BoolValue(true), id); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	a.clearOtherDefaults(id)
@@ -422,7 +423,7 @@ func (a *App) handleSetLlmModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "LlmConfigs" SET "Model" = ?, "UpdatedAt" = ? WHERE "Id" = ?`), hit, a.db.now(), id); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	updated, _ := a.getLlmConfig(id)
@@ -433,7 +434,7 @@ func (a *App) handleSetLlmModel(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleLegacySetLlmConfig(w http.ResponseWriter, r *http.Request) {
 	list, err := a.queryLlmConfigs(` ORDER BY "IsDefault" DESC, "Id"`)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if len(list) > 0 {
@@ -505,13 +506,13 @@ type llmProbeResult struct {
 }
 
 // probeLLM 用 GET {base}/models 探测连通性并尽量列出模型。
-func (a *App) probeLLM(endpoint, apiKey, protocol string) llmProbeResult {
+func (a *App) probeLLM(ctx context.Context, endpoint, apiKey, protocol string) llmProbeResult {
 	base := baseEndpoint(endpoint)
 	if _, err := validateEndpointURL(base); err != nil {
 		return llmProbeResult{Message: err.Error()}
 	}
 	url := base + "/models"
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return llmProbeResult{Message: "接口地址无效: " + err.Error()}
 	}
@@ -579,7 +580,7 @@ func (a *App) handleTestLlm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := a.resolveKey(dto)
-	res := a.probeLLM(dto.ApiEndpoint, key, dto.Protocol)
+	res := a.probeLLM(r.Context(), dto.ApiEndpoint, key, dto.Protocol)
 	writeOK(w, map[string]any{"ok": res.Ok, "message": res.Message, "latencyMs": res.LatencyMs})
 }
 
@@ -591,7 +592,7 @@ func (a *App) handleListLlmModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := a.resolveKey(dto)
-	res := a.probeLLM(dto.ApiEndpoint, key, dto.Protocol)
+	res := a.probeLLM(r.Context(), dto.ApiEndpoint, key, dto.Protocol)
 	models := make([]LlmModelDto, 0, len(res.Models))
 	for _, id := range res.Models {
 		models = append(models, LlmModelDto{ID: id})

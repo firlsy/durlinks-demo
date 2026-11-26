@@ -245,7 +245,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 	case "users":
 		users, err := a.listUsers()
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		data.Users = users
@@ -253,7 +253,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 	case "llm":
 		cfgs, err := a.queryLlmConfigs(` ORDER BY "IsDefault" DESC, "Id"`)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		out := make([]LlmConfigDto, 0, len(cfgs))
@@ -265,7 +265,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 	case "dashboard":
 		stats, err := a.queryStatsMap()
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		data.Stats = stats
@@ -287,7 +287,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 	case "publish":
 		libs, err := a.queryLibrariesForExport()
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		data.Libs = libs
@@ -324,7 +324,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 		}
 		items, total, err := a.db.queryLinks(lq, false)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		data.Links = items
@@ -380,7 +380,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	if err := adminTemplate.Execute(&buf, data); err != nil {
 		a.logf("渲染管理端失败 view=%s: %v", view, err)
-		writeErr(w, http.StatusInternalServerError, "页面渲染失败："+err.Error())
+		writeErr(w, http.StatusInternalServerError, "页面渲染失败")
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -389,11 +389,15 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleConsoleLogout 清掉登录 cookie 并回登录页。
+// 仅当请求携带有效凭证时才下发清除指令，避免跨站 GET 触发登出骚扰（CSRF）。
+// SameSite=Strict 下跨站请求不会带 cookie，因此这里校验能通过即视为本人操作。
 func (a *App) handleConsoleLogout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
-		Name: authCookieName, Value: "", Path: "/", HttpOnly: true,
-		SameSite: http.SameSiteStrictMode, MaxAge: -1, Secure: r.TLS != nil,
-	})
+	if u, claims := a.authFromRequest(r); u != nil && claims != nil {
+		http.SetCookie(w, &http.Cookie{
+			Name: authCookieName, Value: "", Path: "/", HttpOnly: true,
+			SameSite: http.SameSiteStrictMode, MaxAge: -1, Secure: a.cookieSecure(r),
+		})
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

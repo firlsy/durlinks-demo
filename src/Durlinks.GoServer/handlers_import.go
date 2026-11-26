@@ -22,12 +22,36 @@ type xlsxRow map[string]string
 
 var tagSeparators = []string{";", "；", ",", "，"}
 
-// maxXlsxRows 单次导入的最大数据行数（压缩炸弹防护）。
-const maxXlsxRows = 500000
+// trimCell 去空白并限制单元格字符数，防止超长字符串耗尽内存。
+func trimCell(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= maxXlsxCellRunes {
+		return s
+	}
+	// 按 rune 截断，避免切断 UTF-8 多字节字符
+	r := []rune(s)
+	if len(r) > maxXlsxCellRunes {
+		r = r[:maxXlsxCellRunes]
+	}
+	return strings.TrimSpace(string(r))
+}
+
+// 解压炸弹防护：xlsx 是 zip 包，压缩后几 MB 可膨胀到数 GB。
+// 上传体积上限 64MB，这里把解压总量压到 128MB、单表 XML 内存上限 16MB。
+const (
+	maxXlsxRows       = 50000  // 单次导入最大数据行
+	maxXlsxCols       = 200    // 最大列数
+	maxXlsxCellRunes  = 32767  // 单单元格最大字符数（Excel 原生上限）
+	maxXlsxUnzipBytes = 128 << 20
+	maxXlsxXMLBytes   = 16 << 20
+)
 
 // parseXlsx 读取工作簿：优先选名称含「导入」的工作表，首行作表头。
 func parseXlsx(r io.Reader) ([]xlsxRow, error) {
-	f, err := excelize.OpenReader(r)
+	f, err := excelize.OpenReader(r, excelize.Options{
+		UnzipSizeLimit:    maxXlsxUnzipBytes,
+		UnzipXMLSizeLimit: maxXlsxXMLBytes,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("无法读取 Excel：%w", err)
 	}
@@ -60,10 +84,14 @@ func parseXlsx(r io.Reader) ([]xlsxRow, error) {
 		if err != nil {
 			continue
 		}
+		// 列数上限：防止超宽表头耗尽内存
+		if len(cols) > maxXlsxCols {
+			cols = cols[:maxXlsxCols]
+		}
 		if header == nil {
 			header = map[int]string{}
 			for i, v := range cols {
-				name := strings.TrimSpace(v)
+				name := trimCell(v)
 				if name == "" {
 					continue
 				}
@@ -78,7 +106,7 @@ func parseXlsx(r io.Reader) ([]xlsxRow, error) {
 		for i, name := range header {
 			val := ""
 			if i < len(cols) {
-				val = strings.TrimSpace(cols[i])
+				val = trimCell(cols[i])
 			}
 			item[name] = val
 			if val != "" {
@@ -88,11 +116,11 @@ func parseXlsx(r io.Reader) ([]xlsxRow, error) {
 		if empty {
 			continue
 		}
-		out = append(out, item)
-		// 行数上限：xlsx 是压缩包，解压后可能远超上传体积（zip 炸弹），必须有天花板
-		if len(out) > maxXlsxRows {
+		// 行数上限前置：先判断再 append，避免多分配一行
+		if len(out) >= maxXlsxRows {
 			return out, fmt.Errorf("数据行超过 %d，请拆分后再导入", maxXlsxRows)
 		}
+		out = append(out, item)
 	}
 	return out, rows.Error()
 }
@@ -264,6 +292,8 @@ func (a *App) importParsedLinks(links []*parsedLink, libraryID int, source Impor
 			pending = nil
 			return
 		}
+		// panic 时回滚，避免 SQLite 单连接被永久占用导致后续请求全部挂死
+		defer tx.Rollback()
 		committed := 0
 		for _, pl := range pending {
 			created := pl.CreatedAt
@@ -484,14 +514,14 @@ func (a *App) handleStartExcelImport(w http.ResponseWriter, r *http.Request) {
 	}
 	tmp, err := os.CreateTemp("", "durlinks-import-*.xlsx")
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	tmpPath := tmp.Name()
 	if _, err := io.Copy(tmp, file); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	tmp.Close()
@@ -523,8 +553,8 @@ func (a *App) handleStartExcelImport(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		defer f.Close()
 		rows, err := parseXlsx(f)
-		f.Close()
 		if err != nil {
 			globalImportJob.update(func(s *ExcelImportStatus) {
 				s.Running = false
@@ -665,12 +695,12 @@ func (a *App) buildLinksXLSX(items []LinkDto) ([]byte, error) {
 func (a *App) handleExportEnriched(w http.ResponseWriter, r *http.Request) {
 	items, err := a.collectAllLinks(queryInt(r, "limit", 200000), queryIntPtr(r, "libraryId"))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	blob, err := a.buildLinksXLSX(items)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

@@ -90,7 +90,7 @@ func (a *App) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := a.db.sql.Exec(a.db.Rebind(`INSERT INTO "`+k.table+`" ("Name") VALUES (?)`), name); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]string{"name": name})
@@ -126,14 +126,14 @@ func (a *App) handleRenameCategory(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := a.db.sql.Begin()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer tx.Rollback()
 
 	res, err := tx.Exec(a.db.Rebind(`UPDATE "`+k.table+`" SET "Name" = ? WHERE "Name" = ?`), newName, oldName)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -142,12 +142,12 @@ func (a *App) handleRenameCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	if k.linkCol != "" {
 		if _, err := tx.Exec(a.db.Rebind(`UPDATE "Links" SET "`+k.linkCol+`" = ? WHERE "`+k.linkCol+`" = ?`), newName, oldName); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]string{"name": newName})
@@ -185,7 +185,7 @@ func (a *App) handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := a.db.sql.Exec(a.db.Rebind(`DELETE FROM "`+k.table+`" WHERE "Name" = ?`), name); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

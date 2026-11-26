@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -19,13 +20,13 @@ type linkInfo struct {
 }
 
 // recognizeLink 让模型把一段文本抽成结构化字段（提示词与 C# 版一致）。
-func (a *App) recognizeLink(cfg *LlmConfig, rawText string) linkInfo {
+func (a *App) recognizeLink(ctx context.Context, cfg *LlmConfig, rawText string) linkInfo {
 	schema := `{"title":"标题","linkType":"下载直链|官网/普通网址|网盘|磁力","groupName":"分类","platform":"平台(Windows/Android/iOS/Mac/Linux/Web/跨平台等,不确定留空)","tags":["标签1","标签2"],"summary":"一句话摘要"}`
 	prompt := "你是链接信息整理助手。根据下面的文本，输出 JSON（只输出 JSON，不要解释）：\n" +
 		schema + "\n文本：\n" + rawText +
 		"\n规则：无法确定的字段留空字符串，tags 最多 5 个。若文本里没有任何可判断信息，title 用 URL 域名。"
 
-	text, err := a.callChat(cfg, "你是信息抽取助手，只输出合法 JSON。", prompt, 700)
+	text, err := a.callChat(ctx, cfg, "你是信息抽取助手，只输出合法 JSON。", prompt, 700)
 	if err != nil {
 		a.logf("链接识别失败：%v", err)
 		return linkInfo{}
@@ -96,7 +97,7 @@ func (a *App) handleParseLinks(w http.ResponseWriter, r *http.Request) {
 
 	cfg, err := a.defaultLLMConfig()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 
@@ -138,7 +139,7 @@ func (a *App) handleParseLinks(w http.ResponseWriter, r *http.Request) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			results[i] = a.recognizeLink(cfg, cleaned[i])
+			results[i] = a.recognizeLink(r.Context(), cfg, cleaned[i])
 		}(i)
 	}
 	wg.Wait()

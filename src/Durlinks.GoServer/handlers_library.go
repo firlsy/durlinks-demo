@@ -45,7 +45,7 @@ func (a *App) handlePublicLibraries(w http.ResponseWriter, r *http.Request) {
 	channel := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("channel")))
 	out, err := a.publicLibraries(channel)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, out)
@@ -65,7 +65,7 @@ func (a *App) handleAdminLibraries(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := a.db.sql.Query(`SELECT "Id","Name","Description","VisibleOnWeb","VisibleOnClient","SortOrder","CreatedAt" FROM "PublishLibraries" WHERE "IsDeleted" = ` + a.db.False() + ` ORDER BY "SortOrder","Id"`)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer rows.Close()
@@ -79,7 +79,7 @@ func (a *App) handleAdminLibraries(w http.ResponseWriter, r *http.Request) {
 			createdAt       any
 		)
 		if err := rows.Scan(&id, &name, &desc, &onWeb, &onClient, &sortOrder, &createdAt); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		out = append(out, LibraryDto{
@@ -130,14 +130,14 @@ func (a *App) handleCreateLibrary(w http.ResponseWriter, r *http.Request) {
 		err := a.db.sql.QueryRow(a.db.Rebind(`INSERT INTO "PublishLibraries" ("Name","Description","VisibleOnWeb","VisibleOnClient","SortOrder","IsDeleted","CreatedAt")
 			VALUES (?,?,?,?,?,?,?) RETURNING "Id"`), name, nptr(desc), a.db.BoolValue(dto.VisibleOnWeb), a.db.BoolValue(dto.VisibleOnClient), sortOrder, a.db.BoolValue(false), created).Scan(&id)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 	} else {
 		res, err := a.db.sql.Exec(a.db.Rebind(`INSERT INTO "PublishLibraries" ("Name","Description","VisibleOnWeb","VisibleOnClient","SortOrder","IsDeleted","CreatedAt")
 			VALUES (?,?,?,?,?,?,?)`), name, nptr(desc), a.db.BoolValue(dto.VisibleOnWeb), a.db.BoolValue(dto.VisibleOnClient), sortOrder, a.db.BoolValue(false), created)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+			writeInternalErr(w, err)
 			return
 		}
 		last, _ := res.LastInsertId()
@@ -169,7 +169,7 @@ func (a *App) handleUpdateLibrary(w http.ResponseWriter, r *http.Request) {
 	var target int
 	err := a.db.sql.QueryRow(a.db.Rebind(`SELECT COUNT(*) FROM "PublishLibraries" WHERE "Id" = ? AND "IsDeleted" = `+a.db.False()), id).Scan(&target)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if target == 0 {
@@ -195,7 +195,7 @@ func (a *App) handleUpdateLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	args = append(args, id)
 	if _, err := a.db.sql.Exec(a.db.Rebind(`UPDATE "PublishLibraries" SET `+sets+` WHERE "Id" = ?`), args...); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]string{"message": "已保存"})
@@ -228,7 +228,7 @@ func (a *App) handleDeleteLibrary(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := a.db.sql.Begin()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	defer tx.Rollback()
@@ -240,7 +240,7 @@ func (a *App) handleDeleteLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	var remaining int
@@ -252,16 +252,16 @@ func (a *App) handleDeleteLibrary(w http.ResponseWriter, r *http.Request) {
 
 	res, err := tx.Exec(a.db.Rebind(`UPDATE "Links" SET "IsDeleted" = ? WHERE "LibraryId" = ? AND "IsDeleted" = `+a.db.False()), a.db.BoolValue(true), id)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	deletedLinks, _ := res.RowsAffected()
 	if _, err := tx.Exec(a.db.Rebind(`UPDATE "PublishLibraries" SET "IsDeleted" = ? WHERE "Id" = ?`), a.db.BoolValue(true), id); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	a.logf("发布库已删除：%s(Id=%d)，操作人 %s，连带软删除链接 %d 条", name, id, claims.UniqueName, deletedLinks)

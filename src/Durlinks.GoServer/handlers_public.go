@@ -11,7 +11,7 @@ func (a *App) handlePublicLinks(w http.ResponseWriter, r *http.Request) {
 	q := parseLinkQuery(r)
 	items, total, err := a.db.queryLinks(q, true)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	page := max(1, q.Page)
@@ -86,7 +86,7 @@ func (a *App) handleFilters(w http.ResponseWriter, r *http.Request) {
 	channel := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("channel")))
 	out, err := a.publicFilterOptions(channel)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, out)

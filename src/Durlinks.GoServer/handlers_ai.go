@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -47,28 +48,40 @@ var llmThrottle struct {
 	lastAt time.Time
 }
 
-func (a *App) throttleLLM() {
+func (a *App) throttleLLM(ctx context.Context) error {
 	minInterval := 100 * time.Millisecond
 	if a.cfg != nil && a.cfg.BatchEnrich.MinIntervalMs > 0 {
 		minInterval = time.Duration(a.cfg.BatchEnrich.MinIntervalMs) * time.Millisecond
 	}
 	if minInterval <= 0 {
-		return
+		return nil
 	}
+	// 锁内只计算本次应等待到的时间点，绝不在持锁时 sleep，
+	// 避免单个长等待阻塞所有 LLM 请求。
 	llmThrottle.mu.Lock()
-	if wait := minInterval - time.Since(llmThrottle.lastAt); wait > 0 {
-		time.Sleep(wait)
-	}
-	llmThrottle.lastAt = time.Now()
+	wait := minInterval - time.Since(llmThrottle.lastAt)
+	llmThrottle.lastAt = time.Now().Add(wait)
 	llmThrottle.mu.Unlock()
+	if wait > 0 {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 // callChat 发一次 chat 请求，返回模型输出的原文。
-func (a *App) callChat(cfg *LlmConfig, systemPrompt, userPrompt string, maxTokens int) (string, error) {
+func (a *App) callChat(ctx context.Context, cfg *LlmConfig, systemPrompt, userPrompt string, maxTokens int) (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("未配置 LLM")
 	}
-	a.throttleLLM()
+	if err := a.throttleLLM(ctx); err != nil {
+		return "", err
+	}
 	if !cfg.IsConfigured || strings.TrimSpace(cfg.ApiEndpoint) == "" || strings.TrimSpace(cfg.Model) == "" {
 		return "", fmt.Errorf("LLM 尚未配置完成（需要接口地址、密钥与模型）")
 	}
@@ -92,7 +105,7 @@ func (a *App) callChat(cfg *LlmConfig, systemPrompt, userPrompt string, maxToken
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequest(http.MethodPost, chatURL(cfg.ApiEndpoint), bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL(cfg.ApiEndpoint), bytes.NewReader(raw))
 	if err != nil {
 		return "", err
 	}
@@ -147,13 +160,13 @@ type enrichResult struct {
 }
 
 // enrichOne 为单条链接生成标签与摘要（提示词与 C# 版一致）。
-func (a *App) enrichOne(cfg *LlmConfig, title, linkURL, remark string) (enrichResult, error) {
+func (a *App) enrichOne(ctx context.Context, cfg *LlmConfig, title, linkURL, remark string) (enrichResult, error) {
 	schema := `{"tags":["标签1","标签2","标签3"],"summary":"一句话摘要"}`
 	prompt := "为下面的链接生成标签和一句话摘要，输出 JSON（只输出 JSON）：\n" +
 		schema + "\n名称：" + title + "\n链接：" + linkURL + "\n备注：" + remark +
 		"\n标签最多5个，摘要不超过50字。"
 
-	text, err := a.callChat(cfg, "你是信息整理助手，只输出合法 JSON。", prompt, 600)
+	text, err := a.callChat(ctx, cfg, "你是信息整理助手，只输出合法 JSON。", prompt, 600)
 	if err != nil {
 		return enrichResult{}, err
 	}
@@ -260,13 +273,13 @@ func (a *App) handleEnrich(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 
 	cfg, err := a.defaultLLMConfig()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if cfg == nil {
@@ -274,13 +287,13 @@ func (a *App) handleEnrich(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := a.enrichOne(cfg, title, linkURL, remark.String)
+	result, err := a.enrichOne(r.Context(), cfg, title, linkURL, remark.String)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, "AI 补料失败："+err.Error())
 		return
 	}
 	if err := a.applyEnrich(id, result); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	writeOK(w, map[string]any{"tags": result.Tags, "summary": result.Summary})
@@ -289,9 +302,11 @@ func (a *App) handleEnrich(w http.ResponseWriter, r *http.Request) {
 // ======================= 批量补料（后台任务） =======================
 
 type batchEnricher struct {
-	mu     sync.Mutex
-	status BatchEnrichStatus
-	cancel bool
+	mu         sync.Mutex
+	status     BatchEnrichStatus
+	cancel     bool
+	cancelFn   context.CancelFunc
+	jobContext context.Context
 }
 
 var globalBatch = &batchEnricher{}
@@ -302,16 +317,19 @@ func (b *batchEnricher) snapshot() BatchEnrichStatus {
 	return b.status
 }
 
-func (b *batchEnricher) start(mode string) bool {
+func (b *batchEnricher) start(mode string) (context.Context, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.status.Running {
-		return false
+		return nil, false
 	}
 	now := isoTime(time.Now())
 	b.status = BatchEnrichStatus{Running: true, Mode: mode, Message: "准备中…", StartedAt: &now}
 	b.cancel = false
-	return true
+	ctx, cf := context.WithCancel(context.Background())
+	b.cancelFn = cf
+	b.jobContext = ctx
+	return ctx, true
 }
 
 func (b *batchEnricher) requestCancel() bool {
@@ -323,6 +341,9 @@ func (b *batchEnricher) requestCancel() bool {
 	b.cancel = true
 	b.status.CancelRequested = true
 	b.status.Message = "正在取消…"
+	if b.cancelFn != nil {
+		b.cancelFn() // 立即中断在途 LLM HTTP 请求
+	}
 	return true
 }
 
@@ -347,7 +368,7 @@ func (a *App) handleStartBatchEnrich(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg, err := a.defaultLLMConfig()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeInternalErr(w, err)
 		return
 	}
 	if cfg == nil {
@@ -372,7 +393,8 @@ func (a *App) handleStartBatchEnrich(w http.ResponseWriter, r *http.Request) {
 	}
 	concurrency = clamp(concurrency, 1, 8)
 
-	if !globalBatch.start(mode) {
+	jobCtx, started := globalBatch.start(mode)
+	if !started {
 		writeJSON(w, http.StatusConflict, map[string]any{"message": "已有批量补料任务正在运行", "status": globalBatch.snapshot()})
 		return
 	}
@@ -388,14 +410,14 @@ func (a *App) handleStartBatchEnrich(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}()
-		a.runBatchEnrich(cfg, mode, limit, concurrency, req.LibraryID)
+		a.runBatchEnrich(jobCtx, cfg, mode, limit, concurrency, req.LibraryID)
 	}()
 
 	writeOK(w, map[string]any{"started": true, "status": globalBatch.snapshot()})
 }
 
 // runBatchEnrich 拉取候选链接后按并发度消费。
-func (a *App) runBatchEnrich(cfg *LlmConfig, mode string, limit, concurrency, libraryID int) {
+func (a *App) runBatchEnrich(ctx context.Context, cfg *LlmConfig, mode string, limit, concurrency, libraryID int) {
 	cond := `"IsDeleted" = ` + a.db.False()
 	if libraryID > 0 {
 		cond += fmt.Sprintf(` AND "LibraryId" = %d`, libraryID)
@@ -460,7 +482,7 @@ func (a *App) runBatchEnrich(cfg *LlmConfig, mode string, limit, concurrency, li
 					})
 					continue
 				}
-				res, eerr := a.enrichOne(cfg, title, linkURL, remark.String)
+				res, eerr := a.enrichOne(ctx, cfg, title, linkURL, remark.String)
 				if eerr != nil {
 					a.logf("批量补料失败 id=%d: %v", id, eerr)
 					globalBatch.update(func(s *BatchEnrichStatus) {

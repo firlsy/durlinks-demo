@@ -43,6 +43,12 @@ type Config struct {
 		MaxItems      int `json:"maxItems"`
 		MinIntervalMs int `json:"minIntervalMs"`
 	} `json:"batchEnrich"`
+	Security struct {
+		// CookieSecure 强制下发 Secure cookie（HTTPS 反代场景设为 true）。
+		// 缺省时按 r.TLS 判断；BehindProxy 开启后信任 X-Forwarded-Proto。
+		CookieSecure bool `json:"cookieSecure"`
+		BehindProxy  bool `json:"behindProxy"`
+	} `json:"security"`
 }
 
 // LoadConfig 读取 config.json（可选），环境变量优先覆盖，缺省值与 appsettings.json 一致。
@@ -113,6 +119,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if v, ok := env("DURLINKS_STATIC_ADMIN", "StaticFiles__AdminDir"); ok {
 		c.StaticFiles.AdminDir = v
+	}
+	if v, ok := env("DURLINKS_COOKIE_SECURE", "Security__CookieSecure"); ok {
+		c.Security.CookieSecure = strings.EqualFold(v, "true") || v == "1"
+	}
+	if v, ok := env("DURLINKS_BEHIND_PROXY", "Security__BehindProxy"); ok {
+		c.Security.BehindProxy = strings.EqualFold(v, "true") || v == "1"
 	}
 
 	c.Database.Provider = strings.ToLower(strings.TrimSpace(c.Database.Provider))
