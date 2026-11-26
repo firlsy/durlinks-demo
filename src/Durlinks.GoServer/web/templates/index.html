@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DurLinks 链接仓库 · 搜索</title>
-<link rel="stylesheet" href="/assets/css/app.css?v=3">
+<link rel="stylesheet" href="/assets/css/app.css?v=4">
 <link rel="icon" type="image/png" href="/assets/favicon.png">
 </head>
 <body>
@@ -82,7 +82,7 @@
 
         <div class="dl-mid">
           <div class="dl-links">
-            {{ range .AllURLs }}<a class="url-chip" href="{{ . }}" target="_blank" rel="noopener">{{ short . }}</a>{{ end }}
+            {{ range .AllURLs }}<a class="url-chip" href="{{ . }}" target="_blank" rel="noopener noreferrer">{{ short . }}</a>{{ end }}
           </div>
           {{ if or .ExtractCode .ExpireAt }}
           <div class="dl-code">
@@ -98,7 +98,7 @@
           {{ if .Summary }}<p class="dl-summary">{{ .Summary }}</p>{{ end }}
           <div class="dl-right">
             {{ if .SubLinks }}
-            <span class="dl-subs"><span class="dl-k">附属链接：</span>{{ range .SubLinks }}<a href="{{ .URL }}" target="_blank" rel="noopener">{{ if .Title }}{{ .Title }}{{ else }}{{ short .URL }}{{ end }}</a>{{ end }}</span>
+            <span class="dl-subs"><span class="dl-k">附属链接：</span>{{ range .SubLinks }}<a href="{{ .URL }}" target="_blank" rel="noopener noreferrer">{{ if .Title }}{{ .Title }}{{ else }}{{ short .URL }}{{ end }}</a>{{ end }}</span>
             {{ end }}
             {{ if .Tags }}<span class="dl-tags">{{ range .Tags }}<span class="htag">#{{ . }}</span>{{ end }}</span>{{ end }}
           </div>
@@ -116,6 +116,12 @@
       {{ if gt .Page 1 }}<a href="{{ .Link "page" .PrevPage }}">上一页</a>{{ else }}<span class="disabled">上一页</span>{{ end }}
       <span class="pager-now">{{ .Page }} / {{ .TotalPages }}</span>
       {{ if lt .Page .TotalPages }}<a href="{{ .Link "page" .NextPage }}">下一页</a>{{ else }}<span class="disabled">下一页</span>{{ end }}
+      <label class="pager-size">
+        <span>每页</span>
+        <select onchange="if(this.value)location.href=this.value" aria-label="每页显示条数">
+          {{ range .PageSizes }}<option value="{{ if eq . $.PageSize }}{{ $.Link }}{{ else }}{{ $.Link "size" . }}{{ end }}"{{ if eq . $.PageSize }} selected{{ end }}>{{ . }} 条</option>{{ end }}
+        </select>
+      </label>
     </div>
     {{ end }}
   </main>

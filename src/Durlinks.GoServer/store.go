@@ -120,6 +120,15 @@ func (d *DB) queryLinks(q LinkQuery, public bool) ([]LinkDto, int, error) {
 		limit = publicMaxPageSize
 	}
 	q.PageSize = clamp(q.PageSize, 1, limit)
+	// 限制页数上限，避免 (page-1)*pageSize 整数溢出导致 offset 变负：
+	// SQLite 负 offset 视为 0（错返首页），PostgreSQL 直接报错 500。
+	const maxPage = 1000000
+	if q.Page > maxPage {
+		q.Page = maxPage
+	}
+	if q.Page < 1 {
+		q.Page = 1
+	}
 
 	where, args := d.buildLinkWhere(q, public)
 	base := ` FROM "Links" l LEFT JOIN "PublishLibraries" lib ON lib."Id" = l."LibraryId"` + where

@@ -18,6 +18,18 @@ var indexTemplate = template.Must(template.New("index.html").Funcs(template.Func
 	"short": shortURL,
 }).ParseFS(webAssets, "web/templates/index.html"))
 
+// 用户端每页条数选项；第一个即默认值，改这里时记得同步 publicMaxPageSize。
+var webPageSizes = []int{20, 50, 100, 200, 500, 1000}
+
+func webPageSizeAllowed(n int) bool {
+	for _, s := range webPageSizes {
+		if s == n {
+			return true
+		}
+	}
+	return false
+}
+
 // shortURL 显示用截断，完整地址仍在 href 里。
 func shortURL(u string) string {
 	r := []rune(u)
@@ -58,6 +70,8 @@ type webData struct {
 	MaxPage    int
 	PrevPage   int
 	NextPage   int
+	PageSize   int
+	PageSizes  []int
 
 	Items      []linkView
 	Filters    FilterOptionsDto
@@ -125,6 +139,12 @@ func (a *App) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	source := strings.TrimSpace(qs.Get("source"))
 
+	// 每页条数：只接受白名单，其余（含瞎填、负数）回落到 20
+	size := queryInt(r, "size", webPageSizes[0])
+	if !webPageSizeAllowed(size) {
+		size = webPageSizes[0]
+	}
+
 	lq := LinkQuery{
 		Q:         strings.TrimSpace(qs.Get("q")),
 		Group:     strings.TrimSpace(qs.Get("group")),
@@ -132,7 +152,7 @@ func (a *App) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		Platform:  strings.TrimSpace(qs.Get("platform")),
 		Channel:   "web",
 		Page:      page,
-		PageSize:  20,
+		PageSize:  size,
 		LibraryID: queryIntPtr(r, "libraryId"),
 	}
 	if source == "0" || source == "1" {
@@ -168,6 +188,7 @@ func (a *App) handleWebIndex(w http.ResponseWriter, r *http.Request) {
 		Q: lq.Q, Group: lq.Group, Tag: lq.Tag, Platform: lq.Platform, Source: source,
 		Page: page, Total: total, TotalPages: totalPages, MaxPage: maxPage,
 		PrevPage: page - 1, NextPage: page + 1,
+		PageSize: size, PageSizes: webPageSizes,
 		Filters: filters, Libraries: libs,
 		base: qs,
 	}

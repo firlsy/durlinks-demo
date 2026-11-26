@@ -283,13 +283,16 @@ func (c *CaptchaStore) Generate(ticket string) (string, string) {
 			randomInt(120), randomInt(38), randomInt(120), randomInt(38))
 	}
 	colors := []string{"#1e3a8a", "#3730a3", "#0f766e", "#9a3412"}
+	// 每个可见字符后插入随机零宽字符：浏览器渲染不可见，但脚本用 textContent
+	// 直接提取会得到带 U+200B/U+200C 的串，提交后校验失败，挡住简单正则抓取。
+	zeroWidth := []string{"&#8203;", "&#8204;", "&#8205;"}
 	for i, ch := range code {
 		x := 12 + i*27
 		y := 26 + randomInt(4)
 		color := colors[randomInt(4)]
 		rotate := randomInt(30) - 15
-		fmt.Fprintf(&sb, "<text x='%d' y='%d' font-family='Arial,sans-serif' font-size='22' font-weight='bold' fill='%s' transform='rotate(%d %d %d)'>%c</text>\n",
-			x, y, color, rotate, x, y, ch)
+		fmt.Fprintf(&sb, "<text x='%d' y='%d' font-family='Arial,sans-serif' font-size='22' font-weight='bold' fill='%s' transform='rotate(%d %d %d)'>%c%s</text>\n",
+			x, y, color, rotate, x, y, ch, zeroWidth[randomInt(len(zeroWidth))])
 	}
 	sb.WriteString("</svg>\n")
 	return id, sb.String()

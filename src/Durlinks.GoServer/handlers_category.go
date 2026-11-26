@@ -21,6 +21,88 @@ var categoryKinds = map[string]categoryKind{
 	"type":     {table: "LinkTypes", linkCol: "LinkType", label: "链接形式", plural: "types"},
 }
 
+// 多值字段（分组/平台）以逗号分隔存储，与 store.go 的原子匹配口径一致。
+// 单值字段（type）与 ID 关联字段（tag）不走这些辅助函数。
+func isMultiValueCol(col string) bool { return col == "GroupName" || col == "Platform" }
+
+// splitMultiValue 把逗号分隔的多值字段拆成去空白的原子列表。
+func splitMultiValue(v string) []string {
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// joinMultiValue 组装回逗号分隔（不带空格，与 store.go 的 LIKE '%,x,%' 匹配口径一致）。
+func joinMultiValue(parts []string) string { return strings.Join(parts, ",") }
+
+// dbQuerier 同时兼容 *sql.DB 与 *sql.Tx。
+type dbQuerier interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// multiValueInUse 判断多值字段中是否含有某个原子值（逗号包裹精确匹配）。
+func (a *App) multiValueInUse(q dbQuerier, col, name string) bool {
+	sql := a.db.Rebind(`SELECT COUNT(*) FROM "Links" WHERE ` + a.db.concat(`','`, `"`+col+`"`, `','`) + ` LIKE ?`)
+	var n int
+	if err := q.QueryRow(sql, "%,"+name+",%").Scan(&n); err != nil {
+		return false
+	}
+	return n > 0
+}
+
+// renameMultiValue 在多值字段中把 old 原子替换为 new，逐行拆分重组，避免误伤同串里的其它值。
+func (a *App) renameMultiValue(q dbQuerier, col, old, new string) error {
+	rows, err := q.Query(a.db.Rebind(`SELECT "Id", "`+col+`" FROM "Links" WHERE `+
+		a.db.concat(`','`, `"`+col+`"`, `','`)+` LIKE ?`), "%,"+old+",%")
+	if err != nil {
+		return err
+	}
+	type update struct {
+		id  int
+		val string
+	}
+	var updates []update
+	for rows.Next() {
+		var id int
+		var v sql.NullString
+		if err := rows.Scan(&id, &v); err != nil {
+			rows.Close()
+			return err
+		}
+		if !v.Valid {
+			continue
+		}
+		parts := splitMultiValue(v.String)
+		changed := false
+		for i, p := range parts {
+			if p == old {
+				parts[i] = new
+				changed = true
+			}
+		}
+		if changed {
+			updates = append(updates, update{id, joinMultiValue(parts)})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, u := range updates {
+		if _, err := q.Exec(a.db.Rebind(`UPDATE "Links" SET "`+col+`" = ? WHERE "Id" = ?`), u.val, u.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // handleCategories GET /api/admin/categories
 func (a *App) handleCategories(w http.ResponseWriter, r *http.Request) {
 	out := CategoryOptionsDto{Groups: []string{}, Platforms: []string{}, Tags: []string{}, LinkTypes: []string{}}
@@ -141,9 +223,18 @@ func (a *App) handleRenameCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if k.linkCol != "" {
-		if _, err := tx.Exec(a.db.Rebind(`UPDATE "Links" SET "`+k.linkCol+`" = ? WHERE "`+k.linkCol+`" = ?`), newName, oldName); err != nil {
-			writeInternalErr(w, err)
-			return
+		if isMultiValueCol(k.linkCol) {
+			// 多值字段：拆分后替换原子，避免 "音乐,电影" 这样的组合值被漏改
+			if err := a.renameMultiValue(tx, k.linkCol, oldName, newName); err != nil {
+				writeInternalErr(w, err)
+				return
+			}
+		} else {
+			// 单值字段（LinkType）：精确替换
+			if _, err := tx.Exec(a.db.Rebind(`UPDATE "Links" SET "`+k.linkCol+`" = ? WHERE "`+k.linkCol+`" = ?`), newName, oldName); err != nil {
+				writeInternalErr(w, err)
+				return
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -171,9 +262,15 @@ func (a *App) handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if k.linkCol != "" {
-		var used int
-		_ = a.db.sql.QueryRow(a.db.Rebind(`SELECT COUNT(*) FROM "Links" WHERE "`+k.linkCol+`" = ?`), name).Scan(&used)
-		if used > 0 {
+		used := false
+		if isMultiValueCol(k.linkCol) {
+			used = a.multiValueInUse(a.db.sql, k.linkCol, name)
+		} else {
+			var n int
+			_ = a.db.sql.QueryRow(a.db.Rebind(`SELECT COUNT(*) FROM "Links" WHERE "`+k.linkCol+`" = ?`), name).Scan(&n)
+			used = n > 0
+		}
+		if used {
 			writeErr(w, http.StatusConflict, "该"+k.label+"仍被链接使用，请先调整链接"+k.label)
 			return
 		}
@@ -265,15 +362,24 @@ func (a *App) handleBatchDeleteCategories(w http.ResponseWriter, r *http.Request
 
 	// group/platform/type：仍被链接引用的跳过
 	used := map[string]bool{}
-	ph := strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")
-	if rows, err := a.db.sql.Query(a.db.Rebind(`SELECT DISTINCT "`+k.linkCol+`" FROM "Links" WHERE "`+k.linkCol+`" IN (`+ph+`)`), strArgs(names)...); err == nil {
-		for rows.Next() {
-			var v sql.NullString
-			if err := rows.Scan(&v); err == nil && v.Valid {
-				used[v.String] = true
+	if isMultiValueCol(k.linkCol) {
+		// 多值字段：原子匹配，避免 "音乐,电影" 中的 "音乐" 被漏检
+		for _, name := range names {
+			if a.multiValueInUse(a.db.sql, k.linkCol, name) {
+				used[name] = true
 			}
 		}
-		rows.Close()
+	} else {
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")
+		if rows, err := a.db.sql.Query(a.db.Rebind(`SELECT DISTINCT "`+k.linkCol+`" FROM "Links" WHERE "`+k.linkCol+`" IN (`+ph+`)`), strArgs(names)...); err == nil {
+			for rows.Next() {
+				var v sql.NullString
+				if err := rows.Scan(&v); err == nil && v.Valid {
+					used[v.String] = true
+				}
+			}
+			rows.Close()
+		}
 	}
 	for _, name := range names {
 		if used[name] {

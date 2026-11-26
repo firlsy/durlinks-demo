@@ -17,13 +17,11 @@ func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
 		sql string
 		dst *int
 	}
-	var total, hidden, aiCount, groups, tags, netdisk, download int
+	var total, hidden, aiCount, netdisk, download int
 	queries := []kv{
 		{`SELECT COUNT(*) FROM "Links" WHERE "IsDeleted" = ` + a.db.False(), &total},
 		{`SELECT COUNT(*) FROM "Links" WHERE "IsDeleted" = ` + a.db.False() + ` AND "IsHidden" = ` + a.db.True(), &hidden},
 		{`SELECT COUNT(*) FROM "Links" WHERE "IsDeleted" = ` + a.db.False() + ` AND "ImportSource" = 1`, &aiCount},
-		{`SELECT COUNT(DISTINCT "GroupName") FROM "Links" WHERE "IsDeleted" = ` + a.db.False(), &groups},
-		{`SELECT COUNT(*) FROM "Tags"`, &tags},
 		{`SELECT COUNT(*) FROM "Links" WHERE "IsDeleted" = ` + a.db.False() + ` AND "LinkType" = '网盘'`, &netdisk},
 		{`SELECT COUNT(*) FROM "Links" WHERE "IsDeleted" = ` + a.db.False() + ` AND "LinkType" = '下载直链'`, &download},
 	}
@@ -33,6 +31,27 @@ func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// 分组数按逗号拆分后去重统计（与筛选页口径一致），不能用 COUNT(DISTINCT GroupName)
+	groups := 0
+	groupSet := map[string]bool{}
+	if rows, err := a.db.sql.Query(`SELECT "GroupName" FROM "Links" WHERE "IsDeleted" = ` + a.db.False()); err == nil {
+		for rows.Next() {
+			var g sql.NullString
+			if rows.Scan(&g) == nil && g.Valid {
+				for _, atom := range strings.Split(g.String, ",") {
+					if s := strings.TrimSpace(atom); s != "" {
+						groupSet[s] = true
+					}
+				}
+			}
+		}
+		rows.Close()
+	}
+	groups = len(groupSet)
+	// 标签数只统计在用的（有 LinkTags 关联），排除孤立标签
+	tags := 0
+	_ = a.db.sql.QueryRow(`SELECT COUNT(DISTINCT tg."Id") FROM "Tags" tg WHERE EXISTS (SELECT 1 FROM "LinkTags" lt WHERE lt."TagId" = tg."Id")`).
+		Scan(&tags)
 	writeOK(w, map[string]int{
 		"total": total, "hidden": hidden, "aiCount": aiCount,
 		"groups": groups, "tags": tags, "netdisk": netdisk, "download": download,
@@ -429,6 +448,11 @@ func (a *App) handleMoveLinks(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "单次最多 500 条")
 		return
 	}
+	// 移动/复制必须显式指定目标库，不能静默回退到默认库
+	if req.TargetLibraryID <= 0 {
+		writeErr(w, http.StatusBadRequest, "请选择目标发布库")
+		return
+	}
 	target, err := a.db.resolveLibraryID(&req.TargetLibraryID)
 	if err != nil {
 		writeInternalErr(w, err)
@@ -509,6 +533,11 @@ func (a *App) handleCopyLinks(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.IDs) > 200 {
 		writeErr(w, http.StatusBadRequest, "单次最多复制 200 条")
+		return
+	}
+	// 移动/复制必须显式指定目标库，不能静默回退到默认库
+	if req.TargetLibraryID <= 0 {
+		writeErr(w, http.StatusBadRequest, "请选择目标发布库")
 		return
 	}
 	target, err := a.db.resolveLibraryID(&req.TargetLibraryID)
@@ -826,8 +855,11 @@ func (a *App) handleDedupe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.DryRun {
-		result.Kept = 0
-		result.Message = fmt.Sprintf("预览：扫描 %d 条，发现 %d 组重复，可清理 %d 条", result.Scanned, result.Groups, result.Duplicates)
+		// Kept 语义与实际执行保持一致：都是「保留的组数」
+		result.Message = fmt.Sprintf("预览：扫描 %d 条，发现 %d 组重复，可清理 %d 条（保留 %d 条）", result.Scanned, result.Groups, result.Duplicates, result.Kept)
+		if len(toRemove) > maxBatchIDs {
+			result.Message += fmt.Sprintf("；单次最多清理 %d 条，需重复执行", maxBatchIDs)
+		}
 		writeOK(w, result)
 		return
 	}

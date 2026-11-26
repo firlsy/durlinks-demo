@@ -265,8 +265,15 @@ func parseExcelTime(raw string) time.Time {
 
 // ======================= 导入（同步 + 后台任务） =======================
 
+// importMu 保证同一时刻只有一个导入在执行。去重依赖开头的 seen 快照，
+// 若两个导入并发，各自看到旧的 seen 会插入重复的 URL（TOCTOU）。
+var importMu sync.Mutex
+
 // importParsedLinks 把解析结果写入目标库；按 URL 去重，批量提交。
 func (a *App) importParsedLinks(links []*parsedLink, libraryID int, source ImportSource, progress func(processed, imported, skipped, failed int), cancelled func() bool) (imported, skipped, failed int) {
+	importMu.Lock()
+	defer importMu.Unlock()
+
 	seen := map[string]bool{}
 	if rows, err := a.db.sql.Query(a.db.Rebind(`SELECT "Url" FROM "Links" WHERE "IsDeleted" = `+a.db.False()+` AND "LibraryId" = ?`), libraryID); err == nil {
 		for rows.Next() {
@@ -295,7 +302,14 @@ func (a *App) importParsedLinks(links []*parsedLink, libraryID int, source Impor
 		// panic 时回滚，避免 SQLite 单连接被永久占用导致后续请求全部挂死
 		defer tx.Rollback()
 		committed := 0
-		for _, pl := range pending {
+		for idx, pl := range pending {
+			// 每条一个 SAVEPOINT：任一步失败就回滚该条，避免留下无标签/无附属数据的半成品链接
+			sp := fmt.Sprintf("sp_import_%d", idx)
+			if _, err := tx.Exec(`SAVEPOINT ` + sp); err != nil {
+				failed++
+				continue
+			}
+			ok := true
 			created := pl.CreatedAt
 			if created.IsZero() {
 				created = time.Now().UTC()
@@ -307,24 +321,41 @@ func (a *App) importParsedLinks(links []*parsedLink, libraryID int, source Impor
 				LibraryID: &libraryID, CreatedAt: created,
 			})
 			if err != nil {
+				ok = false
+			}
+			if ok {
+				for i, u := range pl.URLs {
+					if _, err := tx.Exec(a.db.Rebind(`INSERT INTO "LinkUrls" ("LinkId","Url","SortOrder") VALUES (?,?,?)`), id, u, i); err != nil {
+						ok = false
+						break
+					}
+				}
+			}
+			if ok {
+				for i, s := range pl.SubLinks {
+					if _, err := tx.Exec(a.db.Rebind(`INSERT INTO "LinkSubLinks" ("LinkId","Url","Title","SortOrder") VALUES (?,?,?,?)`), id, s.URL, nptr(s.Title), i); err != nil {
+						ok = false
+						break
+					}
+				}
+			}
+			if ok {
+				if err := a.replaceTags(tx, id, pl.Tags); err != nil {
+					ok = false
+				}
+			}
+			if ok {
+				_, _ = tx.Exec(`RELEASE SAVEPOINT ` + sp)
+				committed++
+			} else {
+				_, _ = tx.Exec(`ROLLBACK TO SAVEPOINT ` + sp)
+				_, _ = tx.Exec(`RELEASE SAVEPOINT ` + sp)
 				failed++
-				continue
 			}
-			for i, u := range pl.URLs {
-				_, _ = tx.Exec(a.db.Rebind(`INSERT INTO "LinkUrls" ("LinkId","Url","SortOrder") VALUES (?,?,?)`), id, u, i)
-			}
-			for i, s := range pl.SubLinks {
-				_, _ = tx.Exec(a.db.Rebind(`INSERT INTO "LinkSubLinks" ("LinkId","Url","Title","SortOrder") VALUES (?,?,?,?)`), id, s.URL, nptr(s.Title), i)
-			}
-			if err := a.replaceTags(tx, id, pl.Tags); err != nil {
-				failed++
-				continue
-			}
-			committed++
 		}
 		if err := tx.Commit(); err != nil {
+			// 本批 committed 从未计入 imported，不能扣减之前批次已成功导入的数量
 			failed += committed
-			imported -= committed
 		} else {
 			imported += committed
 		}

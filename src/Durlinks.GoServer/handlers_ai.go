@@ -205,8 +205,10 @@ func (a *App) defaultLLMConfig() (*LlmConfig, error) {
 	return &list[0], nil
 }
 
-// applyEnrich 把补料结果写回链接（标签只增不删，摘要为空时不覆盖）。
-func (a *App) applyEnrich(linkID int, r enrichResult) error {
+// applyEnrich 把补料结果写回链接（标签只增不删）。
+// overwriteSummary 控制是否覆盖已有摘要：用户主动单条补料/批量 all 为 true；
+// 批量 missing 必须为 false，否则会静默覆盖用户手写的摘要（数据丢失）。
+func (a *App) applyEnrich(linkID int, r enrichResult, overwriteSummary bool) error {
 	tx, err := a.db.sql.Begin()
 	if err != nil {
 		return err
@@ -214,7 +216,12 @@ func (a *App) applyEnrich(linkID int, r enrichResult) error {
 	defer tx.Rollback()
 
 	if r.Summary != "" {
-		if _, err := tx.Exec(a.db.Rebind(`UPDATE "Links" SET "Summary" = ? WHERE "Id" = ?`), r.Summary, linkID); err != nil {
+		summarySQL := `UPDATE "Links" SET "Summary" = ? WHERE "Id" = ?`
+		if !overwriteSummary {
+			// 仅当原摘要为空时才写入，绝不触碰用户手写内容
+			summarySQL = `UPDATE "Links" SET "Summary" = ? WHERE "Id" = ? AND COALESCE("Summary",'') = '' AND "IsDeleted" = ` + a.db.False()
+		}
+		if _, err := tx.Exec(a.db.Rebind(summarySQL), r.Summary, linkID); err != nil {
 			return err
 		}
 	}
@@ -292,7 +299,7 @@ func (a *App) handleEnrich(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, "AI 补料失败："+err.Error())
 		return
 	}
-	if err := a.applyEnrich(id, result); err != nil {
+	if err := a.applyEnrich(id, result, true); err != nil {
 		writeInternalErr(w, err)
 		return
 	}
@@ -473,7 +480,7 @@ func (a *App) runBatchEnrich(ctx context.Context, cfg *LlmConfig, mode string, l
 					title, linkURL string
 					remark         sql.NullString
 				)
-				qerr := a.db.sql.QueryRow(a.db.Rebind(`SELECT "Title","Url",COALESCE("Remark",'') FROM "Links" WHERE "Id" = ?`), id).
+				qerr := a.db.sql.QueryRow(a.db.Rebind(`SELECT "Title","Url",COALESCE("Remark",'') FROM "Links" WHERE "Id" = ? AND "IsDeleted" = `+a.db.False()), id).
 					Scan(&title, &linkURL, &remark)
 				if qerr != nil {
 					globalBatch.update(func(s *BatchEnrichStatus) {
@@ -492,7 +499,8 @@ func (a *App) runBatchEnrich(ctx context.Context, cfg *LlmConfig, mode string, l
 					})
 					continue
 				}
-				aerr := a.applyEnrich(id, res)
+				// mode=all 才覆盖摘要；mode=missing 只填空缺，保护用户手写内容
+				aerr := a.applyEnrich(id, res, mode == "all")
 				globalBatch.update(func(s *BatchEnrichStatus) {
 					s.Processed++
 					if aerr != nil {

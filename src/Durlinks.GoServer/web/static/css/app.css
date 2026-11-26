@@ -312,7 +312,7 @@ a { color: var(--link); }
     align-items: center;
     gap: 4px;
     padding: 2px;
-    border: 1px solid var(--line-soft);
+    border: 1px solid #e9edf3;
     border-radius: 6px;
     background: var(--fill);
 }
@@ -366,7 +366,7 @@ a { color: var(--link); }
     min-width: 0;
     max-width: 100%;
     padding: 1px 7px;
-    border: 1px solid var(--line-soft);
+    border: 1px solid #e6eaf0;
     border-radius: 5px;
     background: var(--fill);
     color: var(--link);
@@ -427,7 +427,7 @@ a { color: var(--link); }
     gap: 3px 18px;
     margin-top: 6px;
     padding-top: 6px;
-    border-top: 1px dashed var(--line-soft);
+    border-top: 1px dashed #eceff4;
 }
 
 .dl-summary {
@@ -491,11 +491,13 @@ a { color: var(--link); }
 /* ---------- 翻页 ---------- */
 
 .pager {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 18px 0 4px;
+    /* 上下留白对称，右侧「每页」下拉的 50% 垂直居中才和按钮齐平 */
+    padding: 16px 0;
     font-size: 12.5px;
     color: var(--muted);
 }
@@ -516,6 +518,31 @@ a { color: var(--link); }
 .pager .disabled { opacity: .45; }
 
 .pager-now { font-variant-numeric: tabular-nums; }
+
+/* 每页条数：贴在翻页条右侧，不挤动居中的上一页/页码/下一页 */
+.pager-size {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+}
+
+.pager-size select {
+    height: 30px;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #fff;
+    color: var(--ink-2);
+    font: 400 12.5px/1 var(--font);
+    cursor: pointer;
+}
+
+.pager-size select:hover { border-color: #c3cad6; }
 
 /* ---------- 平板 ---------- */
 
@@ -573,9 +600,21 @@ a { color: var(--link); }
 
     .list { padding: 10px 0 20px; }
 
+    /* 手机上横向放不下，每页条数换到翻页条下一行居中 */
+    .pager { flex-wrap: wrap; }
+    .pager-size {
+        position: static;
+        transform: none;
+        width: 100%;
+        justify-content: center;
+        margin-top: 4px;
+    }
+
     .dl { padding: 9px 11px 8px; }
 
-    .dl-title { flex: 1 1 100%; font-size: 15px; }
+    .dl-title { flex: 1 1 100%; font-size: 15px; padding-right: 80px; }
+
+    .dl-top { position: relative; }
 
     .dl-badges {
         flex: 0 1 auto;
@@ -583,7 +622,13 @@ a { color: var(--link); }
         min-width: 0;
     }
 
-    .dl-src { margin-left: auto; }
+    /* 手机上行内放不下，来源标签固定在卡片右上角（对应第一行右侧） */
+    .dl-src {
+        position: absolute;
+        top: 1px;
+        right: 0;
+        margin-left: 0;
+    }
 
     .dl-links { flex: 1 1 100%; min-width: 0; }
     .url-chip { max-width: 100%; }
