@@ -43,8 +43,9 @@ type adminData struct {
 	Stats                                     map[string]int
 	BarManual, BarAI, BarNetdisk, BarDownload int
 
-	Libs   []LibraryDto
-	CurLib int
+	Libs       []LibraryDto
+	CurLib     int
+	CurLibName string
 
 	Links   []LinkDto
 	Editing *LinkDto
@@ -110,7 +111,7 @@ func barHeight(v, max int) int {
 
 // authFromRequest 校验 cookie 里的 JWT（页面导航没有 Authorization 头，靠登录时下发的 cookie）。
 func (a *App) authFromRequest(r *http.Request) (*User, *JWTClaims) {
-	ck, err := r.Cookie("durlinks_token")
+	ck, err := r.Cookie(authCookieName)
 	if err == nil && strings.TrimSpace(ck.Value) != "" {
 		if claims, err := a.auth.ParseToken(ck.Value); err == nil {
 			if u, err := a.findUserByUsername(claims.UniqueName); err == nil && u != nil && u.TokenVersion == claims.TokenVersion {
@@ -236,6 +237,13 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Libs = libs
 		data.CurLib = queryInt(r, "lib", 0)
+		data.CurLibName = "全部发布库"
+		for _, lb := range libs {
+			if lb.ID == data.CurLib {
+				data.CurLibName = lb.Name
+				break
+			}
+		}
 
 		lq := LinkQuery{
 			Q: data.Q, Channel: "web", Page: page, PageSize: size,
@@ -312,7 +320,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 // handleConsoleLogout 清掉登录 cookie 并回登录页。
 func (a *App) handleConsoleLogout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
-		Name: "durlinks_token", Value: "", Path: "/", HttpOnly: true,
+		Name: authCookieName, Value: "", Path: "/", HttpOnly: true,
 		SameSite: http.SameSiteStrictMode, MaxAge: -1, Secure: r.TLS != nil,
 	})
 	http.Redirect(w, r, "/", http.StatusFound)

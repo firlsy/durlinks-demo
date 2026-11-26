@@ -474,6 +474,318 @@
     }
   });
 
+
+  // ================= 批量选择 / 移动复制 / 去重 / 补料 =================
+  function selectedIds() {
+    var out = [];
+    var boxes = document.querySelectorAll('.row-check');
+    for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) out.push(Number(boxes[i].value));
+    return out;
+  }
+  function refreshSelCount() {
+    var el = document.getElementById('selCount');
+    if (el) el.textContent = String(selectedIds().length);
+    var all = document.getElementById('checkAll');
+    if (all) {
+      var boxes = document.querySelectorAll('.row-check');
+      var on = 0;
+      for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) on++;
+      all.checked = boxes.length > 0 && on === boxes.length;
+      all.indeterminate = on > 0 && on < boxes.length;
+    }
+  }
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('row-check')) refreshSelCount();
+  });
+  refreshSelCount();
+
+  function needSelection() {
+    var ids = selectedIds();
+    if (!ids.length) { flash('请先勾选链接', true); return null; }
+    return ids;
+  }
+
+  function afterBatch(msg) {
+    flash(msg);
+    setTimeout(function () { location.reload(); }, 700);
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button') : null;
+    if (!b) return;
+
+    if (b.id === 'batchHide' || b.id === 'batchShow') {
+      var ids = needSelection(); if (!ids) return;
+      var hide = b.id === 'batchHide';
+      api('/api/admin/links/batch/hidden', 'PATCH', { ids: ids, hidden: hide })
+        .then(function (r) {
+          if (r.ok) afterBatch('已' + (hide ? '隐藏' : '显示') + ' ' + (r.data.affected || ids.length) + ' 条');
+          else flash(r.data.message || '操作失败', true);
+        });
+      return;
+    }
+    if (b.id === 'batchDel') {
+      var ids2 = needSelection(); if (!ids2) return;
+      if (!confirm('删除选中的 ' + ids2.length + ' 条链接？')) return;
+      api('/api/admin/links/batch', 'DELETE', { ids: ids2 })
+        .then(function (r) {
+          if (r.ok) afterBatch('已删除 ' + (r.data.affected || ids2.length) + ' 条');
+          else flash(r.data.message || '删除失败', true);
+        });
+      return;
+    }
+    if (b.id === 'moveBtn' || b.id === 'copyBtn') {
+      var ids3 = needSelection(); if (!ids3) return;
+      var sel = document.getElementById('targetLib');
+      var target = sel ? Number(sel.value) : 0;
+      if (!target) { flash('请选择目标发布库', true); return; }
+      var isMove = b.id === 'moveBtn';
+      b.disabled = true;
+      api('/api/admin/links/' + (isMove ? 'move' : 'copy'), 'POST', { ids: ids3, targetLibraryId: target })
+        .then(function (r) {
+          b.disabled = false;
+          if (r.ok) afterBatch('已' + (isMove ? '移动' : '复制') + ' ' + (r.data.affected || ids3.length) + ' 条');
+          else flash(r.data.message || '操作失败', true);
+        })
+        .catch(function () { b.disabled = false; });
+      return;
+    }
+    if (b.id === 'dedupeBtn') {
+      b.disabled = true;
+      var lib = new URLSearchParams(location.search).get('lib');
+      api('/api/admin/links/dedupe', 'POST', { libraryId: lib ? Number(lib) : null, dryRun: true })
+        .then(function (r) {
+          b.disabled = false;
+          if (!r.ok) { flash(r.data.message || '去重失败', true); return; }
+          var d = r.data;
+          if (!d.duplicates) { flash('没有发现重复链接（扫描 ' + d.scanned + ' 条）'); return; }
+          var tips = (d.samples || []).slice(0, 3).map(function (x) {
+            return '· ' + x.url + '  ×' + x.count;
+          }).join('\n');
+          if (!confirm('扫描 ' + d.scanned + ' 条，发现 ' + d.groups + ' 组重复，可清理 ' + d.duplicates + ' 条。\n\n' + tips + '\n\n确定清理？')) return;
+          api('/api/admin/links/dedupe', 'POST', { libraryId: lib ? Number(lib) : null, dryRun: false })
+            .then(function (r2) {
+              if (r2.ok) afterBatch('已清理 ' + (r2.data.removed || 0) + ' 条重复');
+              else flash(r2.data.message || '去重失败', true);
+            });
+        })
+        .catch(function () { b.disabled = false; });
+      return;
+    }
+
+    // ---------- 批量 AI 补料 ----------
+    if (b.id === 'enrichStart') {
+      var lim = Number((document.getElementById('enrichLimit') || {}).value || 0);
+      if (!(lim > 0)) lim = 100;
+      if (lim > 100000) lim = 100000;
+      var mode = (document.getElementById('enrichMode') || {}).value || 'missing';
+      if (mode === 'all' && !confirm('「全部」会覆盖已有摘要与标签，确定继续？')) return;
+      b.disabled = true;
+      api('/api/admin/ai/enrich/batch', 'POST', { mode: mode, limit: lim, concurrency: 3 })
+        .then(function (r) {
+          if (!r.ok) { b.disabled = false; flash(r.data.message || '启动失败', true); return; }
+          pollEnrich();
+        })
+        .catch(function () { b.disabled = false; });
+      return;
+    }
+    if (b.id === 'enrichCancel') {
+      api('/api/admin/ai/enrich/batch/cancel', 'POST').then(function () { pollEnrich(); });
+      return;
+    }
+  });
+
+  var enrichTimer = null;
+  function pollEnrich() {
+    var bar = document.getElementById('enrichProgress');
+    var startBtn = document.getElementById('enrichStart');
+    var cancelBtn = document.getElementById('enrichCancel');
+    function tick() {
+      fetch('/api/admin/ai/enrich/batch/status', { headers: { 'Authorization': 'Bearer ' + token() } })
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          if (bar) {
+            bar.style.display = '';
+            bar.textContent = s.processed + '/' + s.total + '  ✓' + s.succeeded + '  ✗' + s.failed + '  ⊘' + s.skipped
+              + (s.message ? '  ' + s.message : '');
+          }
+          if (cancelBtn) cancelBtn.style.display = s.running ? '' : 'none';
+          if (startBtn) startBtn.disabled = !!s.running;
+          if (s.running) {
+            enrichTimer = setTimeout(tick, 1200);
+          } else {
+            if (s.processed > 0) setTimeout(function () { location.reload(); }, 900);
+          }
+        })
+        .catch(function () {
+          if (startBtn) startBtn.disabled = false;
+        });
+    }
+    tick();
+  }
+  // 刷新页面时若服务端仍有任务在跑，恢复进度显示
+  if (document.getElementById('enrichProgress')) {
+    fetch('/api/admin/ai/enrich/batch/status', { headers: { 'Authorization': 'Bearer ' + token() } })
+      .then(function (r) { return r.json(); })
+      .then(function (s) { if (s.running) pollEnrich(); })
+      .catch(function () {});
+  }
+
+  // ================= 导入弹窗 =================
+  var importTimer = null;
+  function importModal() { return document.getElementById('importModal'); }
+  function openImport() {
+    var m = importModal();
+    if (!m) return;
+    m.style.display = 'flex';
+    refreshImportStatus();
+  }
+  function closeImport() {
+    var m = importModal();
+    if (m) m.style.display = 'none';
+    if (importTimer) { clearTimeout(importTimer); importTimer = null; }
+  }
+  function importMsg(text, isErr) {
+    var el = document.getElementById('importMsg');
+    if (!el) return;
+    if (!text) { el.style.display = 'none'; return; }
+    el.textContent = text;
+    el.className = 'msg' + (isErr ? ' err' : '');
+    el.style.display = 'block';
+  }
+  function switchImportTab(tab) {
+    var tabs = document.querySelectorAll('.import-tab');
+    for (var i = 0; i < tabs.length; i++) {
+      var on = tabs[i].getAttribute('data-tab') === tab;
+      tabs[i].className = 'import-tab' + (on ? ' on' : '');
+    }
+    var p1 = document.getElementById('tabPaste'), p2 = document.getElementById('tabExcel');
+    if (p1) p1.style.display = tab === 'paste' ? '' : 'none';
+    if (p2) p2.style.display = tab === 'excel' ? '' : 'none';
+  }
+
+  function refreshImportStatus() {
+    var box = document.getElementById('excelProgress');
+    if (!box) return;
+    fetch('/api/admin/import/excel/jobs/status', { headers: { 'Authorization': 'Bearer ' + token() } })
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        if (s.running) {
+          box.style.display = '';
+          var line = document.getElementById('excelLine');
+          if (line) line.textContent = '已扫描 ' + s.processed + ' 行 · 已入库 ' + s.imported + ' 条 · 跳过 ' + s.skipped + ' · 失败 ' + s.failed;
+          var bar = document.getElementById('excelBar');
+          if (bar) {
+            var pct = s.processed > 0 ? Math.min(100, Math.round(s.imported * 100 / Math.max(1, s.processed))) : 0;
+            bar.style.width = pct + '%';
+          }
+          importTimer = setTimeout(refreshImportStatus, 1000);
+        } else {
+          box.style.display = 'none';
+          if (s.message) importMsg(s.message, s.failed > 0);
+        }
+      })
+      .catch(function () {});
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button') : null;
+    if (!b) return;
+
+    if (b.classList.contains('import-tab')) { switchImportTab(b.getAttribute('data-tab')); return; }
+    if (b.id === 'importClose' || b.id === 'importClose2') { closeImport(); return; }
+
+    if (b.id === 'parseBtn') {
+      var text = (document.getElementById('pasteText') || {}).value || '';
+      if (!text.trim()) { importMsg('请先粘贴链接', true); return; }
+      b.disabled = true; var t0 = b.textContent; b.textContent = '识别中…';
+      api('/api/admin/import/links/parse', 'POST', { text: text })
+        .then(function (r) {
+          b.disabled = false; b.textContent = t0;
+          var out = document.getElementById('parseOut');
+          if (!r.ok) { importMsg(r.data.message || '识别失败', true); return; }
+          var arr = r.data || [];
+          var recognized = arr.filter(function (x) { return x.recognized; }).length;
+          if (out) {
+            out.style.display = '';
+            out.textContent = arr.map(function (x) {
+              return (x.recognized ? '✓ ' : '· ') + x.title + '\n   ' + (x.url || x.rawText)
+                + '\n   [' + x.linkType + '] [' + x.groupName + ']'
+                + (x.platform ? ' [' + x.platform + ']' : '')
+                + (x.tags && x.tags.length ? ' #' + x.tags.join(' #') : '')
+                + (x.summary ? '\n   ' + x.summary : '');
+            }).join('\n\n');
+          }
+          importMsg('识别完成：' + arr.length + ' 行，其中 ' + recognized + ' 行由模型识别' + (recognized < arr.length ? '，其余按未识别处理' : ''));
+        })
+        .catch(function () { b.disabled = false; b.textContent = t0; });
+      return;
+    }
+
+    if (b.id === 'pasteImportBtn') {
+      var txt = (document.getElementById('pasteText') || {}).value || '';
+      if (!txt.trim()) { importMsg('请先粘贴链接', true); return; }
+      b.disabled = true; var old = b.textContent; b.textContent = '导入中…';
+      var lib = new URLSearchParams(location.search).get('lib');
+      var url = '/api/admin/import/links' + (lib ? '?libraryId=' + lib : '');
+      api('/api/admin/import/links/parse', 'POST', { text: txt })
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.data.message || '识别失败');
+          return api(url, 'POST', r.data);
+        })
+        .then(function (r2) {
+          b.disabled = false; b.textContent = old;
+          if (r2.ok) {
+            importMsg('已导入 ' + (r2.data.imported || 0) + ' 条，正在刷新…');
+            setTimeout(function () { location.href = location.pathname + location.search.replace(/[?&]import=1/, ''); }, 900);
+          } else {
+            importMsg(r2.data.message || '导入失败', true);
+          }
+        })
+        .catch(function (err) {
+          b.disabled = false; b.textContent = old;
+          importMsg(err.message || '导入失败', true);
+        });
+      return;
+    }
+
+    if (b.id === 'excelBtn') {
+      var input = document.getElementById('excelFile');
+      if (!input || !input.files || !input.files.length) { importMsg('请选择 xlsx 文件', true); return; }
+      var fd = new FormData();
+      fd.append('file', input.files[0]);
+      var lib2 = new URLSearchParams(location.search).get('lib');
+      var big = input.files[0].size > 10 * 1024 * 1024;
+      var ep = '/api/admin/import/excel' + (big ? '/jobs' : '') + (lib2 ? '?libraryId=' + lib2 : '');
+      b.disabled = true; var ob = b.textContent; b.textContent = big ? '上传中（后台任务）…' : '上传中…';
+      fetch(ep, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token() }, body: fd })
+        .then(function (resp) {
+          return resp.json().then(function (d) { return { ok: resp.ok, data: d }; });
+        })
+        .then(function (r) {
+          b.disabled = false; b.textContent = ob;
+          if (!r.ok) { importMsg(r.data.message || '导入失败', true); return; }
+          if (r.data.jobId || r.data.running || r.data.background) {
+            importMsg('已提交后台任务，进度如下');
+            refreshImportStatus();
+          } else {
+            importMsg('导入完成：新增 ' + (r.data.imported || 0) + ' 条 · 跳过 ' + (r.data.skipped || 0) + ' · 失败 ' + (r.data.failed || 0));
+            setTimeout(function () { location.reload(); }, 1200);
+          }
+        })
+        .catch(function () { b.disabled = false; b.textContent = ob; importMsg('上传失败', true); });
+      return;
+    }
+
+    if (b.id === 'excelCancel') {
+      api('/api/admin/import/excel/jobs/cancel', 'POST').then(function () { refreshImportStatus(); });
+      return;
+    }
+  });
+
+  // ?import=1 自动打开导入弹窗
+  if (new URLSearchParams(location.search).get('import') === '1') openImport();
+
   // 分类列表本地筛选
   window.filterCat = function (kw) {
     var rows = document.querySelectorAll('#catTable tbody tr');

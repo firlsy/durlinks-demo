@@ -205,7 +205,8 @@ a { color: var(--link); }
     width: 174px;
     max-height: calc(100dvh - var(--top-h) - 8px);
     overflow-y: auto;
-    padding: 15px 16px 24px 0;
+    padding: 14px 14px 24px 0;
+    border-right: 1px solid var(--line-soft);
     overscroll-behavior: contain;
 }
 
@@ -361,6 +362,8 @@ a { color: var(--link); }
 
 .url-chip {
     display: block;
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 100%;
     padding: 1px 7px;
     border: 1px solid var(--line-soft);
@@ -434,6 +437,7 @@ a { color: var(--link); }
     font-size: 13px;
     line-height: 1.45;
     color: var(--body);
+    overflow-wrap: anywhere;
 }
 
 .dl-right {
@@ -454,6 +458,7 @@ a { color: var(--link); }
 }
 
 .dl-subs a {
+    min-width: 0;
     max-width: 320px;
     color: var(--sub);
     text-decoration: none;
@@ -532,7 +537,7 @@ a { color: var(--link); }
     .filter-select { flex: 1 1 calc(50% - 4px); height: 34px; font-size: 13px; }
     .search-go { flex: 1 1 100%; height: 34px; }
 
-    .body { flex-direction: column; padding: 0 12px; }
+    .body { flex-direction: column; align-items: stretch; padding: 0 12px; }
 
     .libbar {
         position: sticky;
@@ -543,6 +548,7 @@ a { color: var(--link); }
         flex: 0 0 auto;
         padding: 9px 0 8px;
         background: #fff;
+        border-right: 0;
         border-bottom: 1px solid var(--line-soft);
         overflow-x: auto;
         overflow-y: hidden;
@@ -570,14 +576,19 @@ a { color: var(--link); }
     .dl { padding: 9px 11px 8px; }
 
     .dl-title { flex: 1 1 100%; font-size: 15px; }
-    .dl-src { margin-left: 0; }
-    .dl-badges { order: 3; }
-    .dl-top { gap: 5px 8px; }
 
-    .dl-links { flex: 1 1 100%; }
+    .dl-badges {
+        flex: 0 1 auto;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .dl-src { margin-left: auto; }
+
+    .dl-links { flex: 1 1 100%; min-width: 0; }
     .url-chip { max-width: 100%; }
 
-    .dl-code { flex: 1 1 100%; }
+    .dl-code { flex: 1 1 100%; flex-wrap: wrap; }
 
     .dl-summary { flex: 1 1 100%; }
     .dl-right { justify-content: flex-start; margin-left: 0; width: 100%; }

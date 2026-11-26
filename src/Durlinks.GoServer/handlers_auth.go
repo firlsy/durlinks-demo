@@ -129,7 +129,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// 页面导航（/console）带不了 Authorization 头，这里额外下发 HttpOnly cookie，
 	// API 请求仍走 Bearer token，两套凭证共享同一个 TokenVersion。
 	http.SetCookie(w, &http.Cookie{
-		Name: "durlinks_token", Value: tokenStr, Path: "/", HttpOnly: true,
+		Name: authCookieName, Value: tokenStr, Path: "/", HttpOnly: true,
 		SameSite: http.SameSiteStrictMode, MaxAge: 12 * 3600, Secure: r.TLS != nil,
 	})
 	writeOK(w, LoginResponse{

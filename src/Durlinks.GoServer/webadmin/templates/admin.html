@@ -168,6 +168,41 @@
               </label>
             </form>
 
+            <div class="toolbar batch-bar">
+              <span class="sel-count">已选 <b id="selCount">0</b> 条</span>
+              <button type="button" id="batchHide">隐藏</button>
+              <button type="button" id="batchShow">显示</button>
+              <button type="button" class="danger" id="batchDel">删除</button>
+              <button type="button" id="dedupeBtn" title="清理当前库内 URL 重复的链接">去重</button>
+              <a class="btn-like" href="/api/admin/ai/enrich/export{{ if .CurLib }}?libraryId={{ .CurLib }}{{ end }}" id="exportLinks">导出</a>
+              <a class="btn-like primary" href="/console?view=publish{{ if .CurLib }}&lib={{ .CurLib }}{{ end }}&import=1">⇩ 导入链接</a>
+              {{ if gt (len .Libs) 1 }}
+              <span class="sel-count move-label">移动到</span>
+              <select id="targetLib">
+                <option value="0">选择目标发布库…</option>
+                {{ range .Libs }}{{ if ne .ID $.CurLib }}<option value="{{ .ID }}">{{ .Name }}</option>{{ end }}{{ end }}
+              </select>
+              <button type="button" id="moveBtn">移动</button>
+              <button type="button" id="copyBtn">复制</button>
+              {{ end }}
+            </div>
+
+            <div class="toolbar enrich-bar">
+              <span class="sel-count">✦ 批量 AI 补料（为无摘要/标签的链接生成标签与摘要）</span>
+              <label class="mini-field">范围
+                <select id="enrichMode">
+                  <option value="missing">仅未补料</option>
+                  <option value="all">全部</option>
+                </select>
+              </label>
+              <label class="mini-field">条数
+                <input type="number" id="enrichLimit" value="100" min="1" max="100000" style="width:92px">
+              </label>
+              <button type="button" id="enrichStart">开始补料</button>
+              <button type="button" id="enrichCancel" style="display:none">取消</button>
+              <span class="enrich-progress" id="enrichProgress" style="display:none"></span>
+            </div>
+
             <table class="grid links-grid">
               <colgroup>
                 <col style="width:34px"><col style="width:16%"><col style="width:20%"><col style="width:17%">
@@ -385,6 +420,50 @@
   </main>
 </div>
 
+
+
+      <div class="modal-mask" id="importModal" style="display:none">
+        <div class="modal" style="max-width:640px">
+          <div class="modal-head">
+            <span>导入链接 · {{ .CurLibName }}</span>
+            <button class="modal-x" id="importClose">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="modal-tabs">
+              <button type="button" class="import-tab on" data-tab="paste">粘贴 / AI 识别</button>
+              <button type="button" class="import-tab" data-tab="excel">Excel 导入</button>
+            </div>
+            <p class="hint">导入到当前发布库「{{ .CurLibName }}」；完成后右侧列表会自动刷新。</p>
+
+            <div id="tabPaste">
+              <label>粘贴链接（每行一条，可附提取码等说明）</label>
+              <textarea id="pasteText" rows="8" placeholder="https://example.com/app.exe&#10;https://pan.example.com/s/abc 提取码：x7k2"></textarea>
+              <div class="btn-row">
+                <button type="button" id="parseBtn">识别预览</button>
+                <button type="button" class="primary" id="pasteImportBtn">确认导入</button>
+              </div>
+              <pre class="json" id="parseOut" style="display:none"></pre>
+            </div>
+
+            <div id="tabExcel" style="display:none">
+              <div class="import-excel">
+                <a class="btn-like" href="/api/admin/import/template">↓ 下载导入模板</a>
+                <input type="file" id="excelFile" accept=".xlsx,.xls">
+                <button type="button" class="primary" id="excelBtn">上传并导入</button>
+                <p class="hint" style="margin:0">大文件在后台导入，可以关掉本弹窗，进度不会丢。</p>
+                <div class="import-progress" id="excelProgress" style="display:none">
+                  <div class="ip-line"><span class="ip-dot"></span><b>导入进行中</b><span id="excelLine"></span></div>
+                  <div class="ip-bar"><span id="excelBar"></span></div>
+                  <button type="button" id="excelCancel">取消导入</button>
+                </div>
+              </div>
+            </div>
+
+            <p class="msg" id="importMsg" style="display:none"></p>
+          </div>
+          <div class="modal-foot"><button type="button" id="importClose2">关闭</button></div>
+        </div>
+      </div>
 
       <div class="modal-mask" id="libModal" style="display:none">
         <div class="modal">

@@ -213,6 +213,9 @@ func (a *App) portGuard(next http.Handler) http.Handler {
 	})
 }
 
+// authCookieName 页面导航与下载入口用的登录 cookie（与 Bearer 共用同一个 JWT 与 TokenVersion）。
+const authCookieName = "durlinks_token"
+
 // authMiddleware 管理端 JWT 校验（登录/验证码/静态资源放行）。
 func (a *App) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,6 +232,14 @@ func (a *App) authMiddleware(next http.Handler) http.Handler {
 		token := ""
 		if strings.HasPrefix(strings.ToLower(header), "bearer ") {
 			token = strings.TrimSpace(header[7:])
+		}
+		// 下载类入口（导出 xlsx、导入模板）是 <a href> 直接导航，带不了 Authorization 头。
+		// cookie 只用于只读请求：写操作一律要求 Bearer，彻底不给跨站表单留口子
+		// （cookie 本身已 SameSite=Strict + HttpOnly，这里再加一层）。
+		if token == "" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			if c, err := r.Cookie(authCookieName); err == nil {
+				token = strings.TrimSpace(c.Value)
+			}
 		}
 		if token == "" {
 			writeErr(w, http.StatusUnauthorized, "未登录")
@@ -333,6 +344,7 @@ func (a *App) apiRoutes(admin bool) *http.ServeMux {
 	mux.HandleFunc("POST /api/admin/links/copy", a.handleCopyLinks)
 	mux.HandleFunc("POST /api/admin/links/dedupe", a.handleDedupe)
 	mux.HandleFunc("POST /api/admin/import/links", a.handleImportLinks)
+	mux.HandleFunc("POST /api/admin/import/links/parse", a.handleParseLinks)
 
 	// 发布库
 	mux.HandleFunc("GET /api/admin/libraries", a.handleAdminLibraries)

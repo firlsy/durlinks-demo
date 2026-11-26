@@ -66,7 +66,8 @@ wwwroot-admin/       管理端静态站（含 login.html）
 > 管理端 Go 版已覆盖：数据看板、发布管理（发布库增删改与渠道切换、搜索、来源筛选、分页、行内编辑、
 > 隐藏/删除/AI 补料）、分组管理（分组/平台/标签/链接形式四类字典的增删改）、用户、大模型（提供商 CRUD、
 > 设默认、连通性测试）、账号设置（MFA 开关、导出数据包、改密码）。
-> 尚未迁移：导入弹窗（Excel / 粘贴）、批量移动复制。需要这两项时把 `Web.AdminMode` 设为 `static`。
+> 导入（粘贴 + AI 识别、Excel 上传与后台进度/取消）、批量勾选后的隐藏/显示/删除、移动/复制、去重、
+> 导出 xlsx 均已迁完。`Web.AdminMode` 保持 `go` 即可，已无需要回退的功能缺口。
 
 环境变量优先：`DURLINKS_DB_PROVIDER`、`DURLINKS_DB_PATH`、`DURLINKS_POSTGRES`、`DURLINKS_PORT_PUBLIC`、`DURLINKS_PORT_ADMIN`、`DURLINKS_JWT_SECRET`、`DURLINKS_HOST`、`DURLINKS_STATIC_USER`、`DURLINKS_STATIC_ADMIN`、`DURLINKS_ADMIN_PASSWORD`、`DURLINKS_ENV`。
 

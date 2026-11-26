@@ -57,7 +57,7 @@
     <nav class="lib-list">
       <a class="lib{{ if not .SelLibrary }} on{{ end }}" href="{{ .Link "libraryId" 0 }}">全部链接</a>
       {{ range .Libraries }}
-      <a class="lib{{ if eq $.SelLibrary .ID }} on{{ end }}" href="{{ $.Link "libraryId" .ID }}"><span class="lib-name">{{ .Name }}</span><span class="lib-num">{{ .LinkCount }}</span></a>
+      <a class="lib{{ if eq $.SelLibrary .ID }} on{{ end }}" href="{{ $.Link "libraryId" .ID }}"><span class="lib-name">{{ .Name }}</span></a>
       {{ end }}
     </nav>
   </aside>

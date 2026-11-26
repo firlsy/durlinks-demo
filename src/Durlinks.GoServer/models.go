@@ -264,14 +264,15 @@ type PasteDto struct {
 }
 
 type LinkInfoDto struct {
-	Title     string   `json:"title"`
-	URL       string   `json:"url"`
-	RawText   string   `json:"rawText"`
-	LinkType  string   `json:"linkType"`
-	GroupName string   `json:"groupName"`
-	Platform  string   `json:"platform"`
-	Summary   string   `json:"summary"`
-	Tags      []string `json:"tags"`
+	Title      string   `json:"title"`
+	Recognized bool     `json:"recognized"`
+	URL        string   `json:"url"`
+	RawText    string   `json:"rawText"`
+	LinkType   string   `json:"linkType"`
+	GroupName  string   `json:"groupName"`
+	Platform   string   `json:"platform"`
+	Summary    string   `json:"summary"`
+	Tags       []string `json:"tags"`
 }
 
 type CategoryOptionsDto struct {
