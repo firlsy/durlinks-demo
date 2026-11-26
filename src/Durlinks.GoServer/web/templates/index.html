@@ -3,107 +3,138 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>链接仓库 · 搜索</title>
-<link rel="stylesheet" href="/assets/css/app.css?v=2">
+<title>DurLinks 链接仓库 · 搜索</title>
+<link rel="stylesheet" href="/assets/css/app.css?v=3">
 <link rel="icon" type="image/png" href="/assets/favicon.png">
 </head>
 <body>
 
-<div class="hero">
-  <h1>🔗 链接仓库</h1>
-  <p>搜索、筛选、收藏 —— 所有链接一目了然</p>
-</div>
-
-{{ if .Libraries }}
-<div class="lib-tabs" role="group" aria-label="发布库筛选">
-  <a class="lib-tab{{ if not .SelLibrary }} on{{ end }}" href="{{ .Link "libraryId" 0 }}">全部</a>
-  {{ range .Libraries }}
-  <a class="lib-tab{{ if eq $.SelLibrary .ID }} on{{ end }}" href="{{ $.Link "libraryId" .ID }}">{{ .Name }}</a>
-  {{ end }}
-  {{ if or .SelLibrary .Q }}
-  <span class="lib-hint">{{ if .SelLibrary }}当前库：{{ .LibName }} · {{ end }}搜索条件已保留</span>
-  {{ end }}
-</div>
-{{ end }}
-
-<form class="search-bar" method="get" action="/">
-  {{ if .SelLibrary }}<input type="hidden" name="libraryId" value="{{ .SelLibrary }}">{{ end }}
-  <input class="search-input" type="search" name="q" value="{{ .Q }}"
-         placeholder="搜索名称、链接、摘要…（回车）" autocomplete="off">
-  <select class="filter-select" name="group" onchange="this.form.submit()">
-    <option value="">全部分组</option>
-    {{ range .Filters.Groups }}<option value="{{ . }}"{{ if eq $.Group . }} selected{{ end }}>{{ . }}</option>{{ end }}
-  </select>
-  <select class="filter-select" name="tag" onchange="this.form.submit()">
-    <option value="">全部标签</option>
-    {{ range .Filters.Tags }}<option value="{{ . }}"{{ if eq $.Tag . }} selected{{ end }}>{{ . }}</option>{{ end }}
-  </select>
-  <select class="filter-select" name="platform" onchange="this.form.submit()">
-    <option value="">全部平台</option>
-    {{ range .Filters.Platforms }}<option value="{{ . }}"{{ if eq $.Platform . }} selected{{ end }}>{{ . }}</option>{{ end }}
-  </select>
-  <select class="filter-select" name="source" onchange="this.form.submit()">
-    <option value="">全部来源</option>
-    <option value="0"{{ if eq .Source "0" }} selected{{ end }}>人工导入</option>
-    <option value="1"{{ if eq .Source "1" }} selected{{ end }}>AI接入</option>
-  </select>
-  <button type="submit" class="search-go">搜索</button>
-</form>
-
-<p class="status">共 <b>{{ .Total }}</b> 条结果 · 第 {{ .Page }}/{{ .MaxPage }} 页{{ if .SelLibrary }}<span class="status-lib"> · {{ .LibName }}</span>{{ end }}{{ if .Q }}<span class="status-lib"> · 关键词「{{ .Q }}」</span>{{ end }}</p>
-
-{{ if .Items }}
-<div class="cards">
-  {{ range .Items }}
-  <article class="card">
-    <div class="card-row1">
-      <h3 class="card-title">{{ .Title }}</h3>
-      <div class="urls">
-        {{ range .AllURLs }}<a href="{{ . }}" target="_blank" rel="noopener" class="url-link">{{ short . }}</a>{{ end }}
-      </div>
-      <div class="meta">
-        <span class="tag type-tag">{{ .LinkType }}</span>
-        <span class="tag group">{{ .GroupName }}</span>
-        {{ if .Platform }}<span class="tag platform">{{ .Platform }}</span>{{ end }}
-        {{ if .Version }}<span class="tag version">{{ .Version }}</span>{{ end }}
-      </div>
-      <span class="source-badge {{ if .IsAI }}ai{{ else }}manual{{ end }}">{{ .ImportSourceLabel }}</span>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" width="21" height="21" fill="none"
+           stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true">
+        <path d="M9.6 14.4l4.8-4.8"/>
+        <path d="M12.9 6.6l1.5-1.5a3.6 3.6 0 0 1 5.1 5.1l-1.6 1.6"/>
+        <path d="M11.1 17.4l-1.5 1.5a3.6 3.6 0 0 1-5.1-5.1l1.6-1.6"/>
+      </svg>
+      <h1 class="brand-name">DurLinks<span>链接仓库</span></h1>
     </div>
+    <p class="tagline">搜索、筛选、收藏 —— 所有链接一目了然</p>
 
-    <div class="card-row2">
-      {{ if .Summary }}<p class="summary">{{ .Summary }}</p>{{ end }}
-      {{ if .ExtractCode }}
-      <div class="detail">提取码：<code>{{ .ExtractCode }}</code>
-        <button type="button" class="copy-btn" data-copy="{{ .ExtractCode }}">复制</button>
-        {{ if .ExpireAt }}<span class="detail"> · 过期：{{ .ExpireAt }}</span>{{ end }}
-      </div>
+    <form class="search-row" method="get" action="/" role="search">
+      {{ if .SelLibrary }}<input type="hidden" name="libraryId" value="{{ .SelLibrary }}">{{ end }}
+      <input class="search-input" type="search" name="q" value="{{ .Q }}"
+             placeholder="搜索名称、链接、摘要…（回车）" autocomplete="off" aria-label="搜索关键词">
+      <select class="filter-select" name="group" onchange="this.form.submit()" aria-label="分组">
+        <option value="">全部分组</option>
+        {{ range .Filters.Groups }}<option value="{{ . }}"{{ if eq $.Group . }} selected{{ end }}>{{ . }}</option>{{ end }}
+      </select>
+      <select class="filter-select" name="tag" onchange="this.form.submit()" aria-label="标签">
+        <option value="">全部标签</option>
+        {{ range .Filters.Tags }}<option value="{{ . }}"{{ if eq $.Tag . }} selected{{ end }}>{{ . }}</option>{{ end }}
+      </select>
+      <select class="filter-select" name="platform" onchange="this.form.submit()" aria-label="平台">
+        <option value="">全部平台</option>
+        {{ range .Filters.Platforms }}<option value="{{ . }}"{{ if eq $.Platform . }} selected{{ end }}>{{ . }}</option>{{ end }}
+      </select>
+      <select class="filter-select" name="source" onchange="this.form.submit()" aria-label="来源">
+        <option value="">全部来源</option>
+        <option value="0"{{ if eq .Source "0" }} selected{{ end }}>人工导入</option>
+        <option value="1"{{ if eq .Source "1" }} selected{{ end }}>AI接入</option>
+      </select>
+      <button type="submit" class="search-go">搜索</button>
+    </form>
+
+    <p class="count">共 <b>{{ .Total }}</b> 条结果 · 第 {{ .Page }}/{{ .MaxPage }} 页{{ if .SelLibrary }}<span class="count-x">{{ .LibName }}</span>{{ end }}{{ if .Q }}<span class="count-x">关键词「{{ .Q }}」</span>{{ end }}</p>
+  </div>
+</header>
+
+<div class="body">
+
+  <aside class="libbar" aria-label="发布库">
+    <p class="libbar-title">发布库</p>
+    <nav class="lib-list">
+      <a class="lib{{ if not .SelLibrary }} on{{ end }}" href="{{ .Link "libraryId" 0 }}">全部链接</a>
+      {{ range .Libraries }}
+      <a class="lib{{ if eq $.SelLibrary .ID }} on{{ end }}" href="{{ $.Link "libraryId" .ID }}"><span class="lib-name">{{ .Name }}</span><span class="lib-num">{{ .LinkCount }}</span></a>
       {{ end }}
-      {{ if .SubLinks }}
-      <div class="sublinks">
-        <span class="sub-label">附属链接：</span>
-        {{ range .SubLinks }}<a href="{{ .URL }}" target="_blank" rel="noopener">{{ if .Title }}{{ .Title }}{{ else }}{{ short .URL }}{{ end }}</a>{{ end }}
-      </div>
-      {{ end }}
-      {{ if .Tags }}
-      <div class="tags-row">{{ range .Tags }}<span class="mini-tag">#{{ . }}</span>{{ end }}</div>
+    </nav>
+  </aside>
+
+  <main class="list">
+    {{ if .Items }}
+    <div class="rows">
+      {{ range .Items }}
+      <article class="dl">
+        <div class="dl-top">
+          <h2 class="dl-title">{{ .Title }}</h2>
+          {{ if or .LinkType .GroupName .Platform .Version }}
+          <div class="dl-badges">
+            {{ if .LinkType }}<span class="bd bd-type">{{ .LinkType }}</span>{{ end }}
+            {{ if .GroupName }}<span class="bd bd-group">{{ .GroupName }}</span>{{ end }}
+            {{ if .Platform }}<span class="bd bd-platform">{{ .Platform }}</span>{{ end }}
+            {{ if .Version }}<span class="bd bd-version">{{ .Version }}</span>{{ end }}
+          </div>
+          {{ end }}
+          <span class="dl-src {{ if .IsAI }}ai{{ else }}manual{{ end }}">{{ .ImportSourceLabel }}</span>
+        </div>
+
+        <div class="dl-mid">
+          <div class="dl-links">
+            {{ range .AllURLs }}<a class="url-chip" href="{{ . }}" target="_blank" rel="noopener">{{ short . }}</a>{{ end }}
+          </div>
+          {{ if or .ExtractCode .ExpireAt }}
+          <div class="dl-code">
+            {{ if .ExtractCode }}<span class="dl-k">提取码</span><code class="dl-code-v">{{ .ExtractCode }}</code>
+            <button type="button" class="copy-btn" data-copy="{{ .ExtractCode }}">复制</button>{{ end }}
+            {{ if .ExpireAt }}<span class="dl-k">有效期至</span><span class="dl-code-v">{{ .ExpireAt }}</span>{{ end }}
+          </div>
+          {{ end }}
+        </div>
+
+        {{ if or .Summary .SubLinks .Tags }}
+        <div class="dl-foot">
+          {{ if .Summary }}<p class="dl-summary">{{ .Summary }}</p>{{ end }}
+          <div class="dl-right">
+            {{ if .SubLinks }}
+            <span class="dl-subs"><span class="dl-k">附属链接：</span>{{ range .SubLinks }}<a href="{{ .URL }}" target="_blank" rel="noopener">{{ if .Title }}{{ .Title }}{{ else }}{{ short .URL }}{{ end }}</a>{{ end }}</span>
+            {{ end }}
+            {{ if .Tags }}<span class="dl-tags">{{ range .Tags }}<span class="htag">#{{ . }}</span>{{ end }}</span>{{ end }}
+          </div>
+        </div>
+        {{ end }}
+      </article>
       {{ end }}
     </div>
-  </article>
-  {{ end }}
-</div>
-{{ else }}
-<p class="status">没有匹配的链接，换个关键词试试。</p>
-{{ end }}
+    {{ else }}
+    <p class="empty">没有匹配的链接，换个关键词试试。</p>
+    {{ end }}
 
-{{ if gt .TotalPages 1 }}
-<div class="pager">
-  {{ if gt .Page 1 }}<a href="{{ .Link "page" .PrevPage }}">上一页</a>{{ else }}<span class="disabled">上一页</span>{{ end }}
-  <span>{{ .Page }} / {{ .TotalPages }}</span>
-  {{ if lt .Page .TotalPages }}<a href="{{ .Link "page" .NextPage }}">下一页</a>{{ else }}<span class="disabled">下一页</span>{{ end }}
+    {{ if gt .TotalPages 1 }}
+    <div class="pager">
+      {{ if gt .Page 1 }}<a href="{{ .Link "page" .PrevPage }}">上一页</a>{{ else }}<span class="disabled">上一页</span>{{ end }}
+      <span class="pager-now">{{ .Page }} / {{ .TotalPages }}</span>
+      {{ if lt .Page .TotalPages }}<a href="{{ .Link "page" .NextPage }}">下一页</a>{{ else }}<span class="disabled">下一页</span>{{ end }}
+    </div>
+    {{ end }}
+  </main>
+
 </div>
-{{ end }}
 
 <script>
+// 顶栏高度写进 CSS 变量，左侧发布库栏才能刚好吸附在它下面
+(function () {
+  var top = document.querySelector('.top');
+  if (!top) return;
+  var sync = function () {
+    document.documentElement.style.setProperty('--top-h', top.offsetHeight + 'px');
+  };
+  sync();
+  window.addEventListener('resize', sync);
+  if (window.ResizeObserver) new ResizeObserver(sync).observe(top);
+})();
+
 // 复制提取码：优先 Clipboard API，http 下退回 execCommand
 document.addEventListener('click', function (e) {
   var b = e.target.closest('.copy-btn');
@@ -120,6 +151,7 @@ document.addEventListener('click', function (e) {
     document.body.removeChild(ta); done();
   }
 });
+
 // 搜索框失焦且内容变化时自动提交，照顾不按回车的习惯
 (function () {
   var i = document.querySelector('.search-input');

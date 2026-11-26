@@ -547,3 +547,12 @@ button.ch-pill:hover { border-color: #94a3b8; filter: brightness(.97); }
 .links-grid td:nth-child(5), .links-grid td:nth-child(8), .links-grid td:nth-child(9) { white-space: nowrap; }
 .links-grid .row-actions { white-space: nowrap; }
 .links-grid .row-actions .btn-like { margin-right: 2px; }
+
+/* 工具栏：输入框可伸缩、按钮不被挤到下一行 */
+.toolbar { flex-wrap: wrap; }
+.toolbar > input, .toolbar > select { flex: 1 1 180px; width: auto; min-width: 110px; }
+.toolbar > button, .toolbar > .btn-like { flex: 0 0 auto; }
+.toolbar > input#catNew { flex: 2 1 260px; }
+.toolbar > input#catFilter { flex: 1 1 160px; }
+.toolbar > input#mfaDisableCode, .toolbar > input#mfaVerifyCode { flex: 0 0 130px; }
+.toolbar > input#exportPwd { flex: 1 1 240px; }

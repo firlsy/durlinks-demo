@@ -89,16 +89,25 @@
             <div class="lib-head"><div><h3>发布库 <span class="badge manual" style="margin-left:6px">{{ len .Libs }}</span></h3></div></div>
             <div class="lib-grid lib-list">
               {{ range .Libs }}
-              <a class="lib-card{{ if eq $.CurLib .ID }} on{{ end }}" href="{{ $.Link "lib" .ID "page" 0 }}" style="text-decoration:none;color:inherit">
-                <div class="lib-card-head"><span class="lib-name" title="{{ .Name }}">{{ .Name }}</span></div>
+              <div class="lib-card{{ if eq $.CurLib .ID }} on{{ end }}">
+                <div class="lib-card-head">
+                  <a class="lib-name" href="{{ $.Link "lib" .ID "page" 0 }}" title="{{ .Name }}">{{ .Name }}</a>
+                  <span class="lib-actions" style="opacity:1">
+                    <button class="js-lib-edit" data-id="{{ .ID }}" data-name="{{ .Name }}"
+                      data-desc="{{ ptr .Description }}" data-web="{{ if .VisibleOnWeb }}1{{ else }}0{{ end }}"
+                      data-client="{{ if .VisibleOnClient }}1{{ else }}0{{ end }}" data-sort="{{ .SortOrder }}">✎</button>
+                    <button class="danger js-lib-del" data-id="{{ .ID }}" data-name="{{ .Name }}">×</button>
+                  </span>
+                </div>
                 <div class="lib-count"><b>{{ .LinkCount }}</b> 条链接</div>
                 <div class="lib-channels">
-                  <span class="ch-pill {{ if .VisibleOnWeb }}on{{ else }}off{{ end }}">网页端</span>
-                  <span class="ch-pill {{ if .VisibleOnClient }}on{{ else }}off{{ end }}">客户端</span>
+                  <button type="button" class="ch-pill {{ if .VisibleOnWeb }}on{{ else }}off{{ end }} js-lib-ch" data-id="{{ .ID }}" data-side="web">网页端</button>
+                  <button type="button" class="ch-pill {{ if .VisibleOnClient }}on{{ else }}off{{ end }} js-lib-ch" data-id="{{ .ID }}" data-side="client">客户端</button>
                 </div>
-              </a>
+              </div>
               {{ end }}
               <a class="lib-new" href="{{ .Link "lib" 0 }}"><span class="plus">◉</span><span>全部发布库</span></a>
+              <button class="lib-new" id="libAdd" style="border-style:dashed"><span class="plus">+</span><span>新建发布库</span></button>
             </div>
           </div>
         </aside>
@@ -206,6 +215,166 @@
         </div>
       </div>
 
+    {{ else if eq .View "categories" }}
+      <div class="toolbar" style="margin-bottom:12px">
+        <a class="btn-like{{ if eq .CatKind "group" }} primary{{ end }}" href="/console?view=categories&kind=group">分组</a>
+        <a class="btn-like{{ if eq .CatKind "platform" }} primary{{ end }}" href="/console?view=categories&kind=platform">平台</a>
+        <a class="btn-like{{ if eq .CatKind "tag" }} primary{{ end }}" href="/console?view=categories&kind=tag">标签</a>
+        <a class="btn-like{{ if eq .CatKind "type" }} primary{{ end }}" href="/console?view=categories&kind=type">链接形式</a>
+      </div>
+      <div class="panel">
+        <div class="panel-title">当前选项 <span class="badge manual" style="margin-left:6px">{{ .CatCount }}</span></div>
+        <div class="toolbar">
+          <input id="catNew" placeholder="输入新名称后回车新建">
+          <button class="primary" id="catAdd" data-kind="{{ .CatKind }}">+ 新建</button>
+          <input id="catFilter" placeholder="筛选当前列表…" oninput="filterCat(this.value)">
+        </div>
+        <table class="grid" id="catTable">
+          <thead><tr><th style="width:60%">名称</th><th>操作</th></tr></thead>
+          <tbody>
+          {{ range .CatValues }}
+            <tr data-name="{{ . }}">
+              <td>{{ . }}</td>
+              <td class="row-actions">
+                <button class="js-cat-rename" data-kind="{{ $.CatKind }}" data-name="{{ . }}">重命名</button>
+                <button class="danger js-cat-del" data-kind="{{ $.CatKind }}" data-name="{{ . }}">×</button>
+              </td>
+            </tr>
+          {{ end }}
+          </tbody>
+        </table>
+        {{ if eq .CatCount 0 }}<p class="hint">还没有任何选项，上方输入名称新建一个。</p>{{ end }}
+      </div>
+
+    {{ else if eq .View "users" }}
+      <div class="panel">
+        <div class="panel-title">管理员账号</div>
+        <table class="grid">
+          <thead><tr><th style="width:70px">ID</th><th>用户名</th><th>角色</th><th>MFA</th><th>创建时间</th></tr></thead>
+          <tbody>
+          {{ range .Users }}
+            <tr><td>{{ .ID }}</td><td>{{ .Username }}</td><td>{{ .Role }}</td>
+              <td>{{ if .MfaEnabled }}已开启{{ else }}未开启{{ end }}</td><td>{{ .CreatedAt }}</td></tr>
+          {{ end }}
+          </tbody>
+        </table>
+      </div>
+      {{ if .IsSuperAdmin }}
+      <div class="panel">
+        <div class="panel-title">新建管理员</div>
+        <div class="toolbar">
+          <input id="newUserName" placeholder="用户名">
+          <input id="newUserPwd" type="password" placeholder="密码">
+          <button class="primary" id="createUser">创建</button>
+        </div>
+        <p class="hint">新建账号角色固定为 Admin：可管理链接与发布库，但不能创建账号。</p>
+      </div>
+      {{ end }}
+
+    {{ else if eq .View "llm" }}
+      <div class="panel">
+        <div class="panel-title">大模型提供商</div>
+        {{ if .LlmConfigs }}
+        <table class="grid">
+          <thead><tr><th>名称</th><th style="width:90px">协议</th><th>模型</th><th>地址</th><th style="width:80px">密钥</th><th style="width:70px">默认</th><th style="width:200px">操作</th></tr></thead>
+          <tbody>
+          {{ range .LlmConfigs }}
+            <tr>
+              <td>{{ .Name }}</td>
+              <td>{{ .Protocol }}</td>
+              <td><span class="multi-cell" title="{{ .Model }}">{{ .Model }}</span></td>
+              <td><span class="url-cell" title="{{ .ApiEndpoint }}">{{ .ApiEndpoint }}</span></td>
+              <td>{{ if .HasApiKey }}已设置{{ else }}未设置{{ end }}</td>
+              <td>{{ if .IsDefault }}是{{ else }}否{{ end }}</td>
+              <td class="row-actions">
+                <button class="js-llm-test" data-id="{{ .ID }}">测试</button>
+                <button class="js-llm-edit" data-id="{{ .ID }}"
+                  data-name="{{ .Name }}" data-protocol="{{ .Protocol }}" data-endpoint="{{ .ApiEndpoint }}"
+                  data-model="{{ .Model }}" data-models="{{ join .Models "," }}" data-default="{{ if .IsDefault }}1{{ else }}0{{ end }}">编辑</button>
+                {{ if not .IsDefault }}<button class="js-llm-default" data-id="{{ .ID }}">设默认</button>{{ end }}
+                <button class="danger js-llm-del" data-id="{{ .ID }}">×</button>
+              </td>
+            </tr>
+          {{ end }}
+          </tbody>
+        </table>
+        {{ else }}
+        <p class="hint">还没有配置提供商。点下方按钮填入接口地址、密钥与模型后即可使用 AI 补料。</p>
+        {{ end }}
+        <div class="btn-row"><button class="primary" id="llmAdd">+ 添加提供商</button></div>
+      </div>
+
+      <div class="modal-mask" id="llmModal" style="display:none">
+        <div class="modal">
+          <div class="modal-head"><span id="llmModalTitle">添加提供商</span><button class="modal-x" id="llmClose">×</button></div>
+          <div class="modal-body">
+            <input type="hidden" id="llmId" value="0">
+            <label>名称</label><input id="llmName" placeholder="例如 OpenAI / 中转站 A">
+            <label>协议</label>
+            <select id="llmProtocol">
+              <option value="openai">OpenAI 兼容</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="gemini">Gemini</option>
+            </select>
+            <label>Base URL</label><input id="llmEndpoint" placeholder="https://api.openai.com/v1">
+            <label>API Key</label><input id="llmKey" type="password" placeholder="留空表示不修改">
+            <label>当前模型</label><input id="llmModel" placeholder="gpt-4o-mini">
+            <label>模型清单（逗号分隔）</label><input id="llmModels" placeholder="gpt-4o-mini,gpt-4o">
+            <label class="inline"><input type="checkbox" id="llmDefault"> 设为默认</label>
+            <div class="btn-row"><button class="primary" id="llmSave">保存</button><button id="llmCancel">取消</button></div>
+          </div>
+        </div>
+      </div>
+
+    {{ else if eq .View "account" }}
+      <div class="panel">
+        <div class="panel-title">账号信息</div>
+        <div class="kv-row"><span>用户名</span><b>{{ .User }}</b></div>
+        <div class="kv-row"><span>角色</span><b>{{ .Role }}</b></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">双因素认证
+          <span class="badge {{ if .MyMfa }}ai{{ else }}manual{{ end }}" style="margin-left:8px">{{ if .MyMfa }}已开启{{ else }}未开启{{ end }}</span>
+        </div>
+        {{ if .MyMfa }}
+          <p class="hint">关闭后登录只需密码，安全性会下降。</p>
+          <div class="toolbar">
+            <input id="mfaDisableCode" placeholder="000000" maxlength="6" style="width:130px">
+            <button class="danger" id="mfaDisable">关闭 MFA</button>
+          </div>
+        {{ else }}
+          <p class="hint">开启后登录需额外输入验证器 App 的 6 位动态码。</p>
+          <button class="primary" id="mfaStart">开启 MFA</button>
+          <div id="mfaSetupBox" style="display:none;margin-top:10px">
+            <p class="hint">1. 在验证器 App（Google / Microsoft Authenticator 等）中手动添加账号，密钥：</p>
+            <div class="secret-box"><code id="mfaSecret"></code></div>
+            <p class="hint">2. 输入 App 显示的 6 位动态码完成绑定：</p>
+            <div class="toolbar">
+              <input id="mfaVerifyCode" placeholder="000000" maxlength="6" style="width:130px">
+              <button class="primary" id="mfaVerify">确认开启</button>
+            </div>
+          </div>
+        {{ end }}
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">导出数据</div>
+        <p class="hint">导出链接、发布库、统计与说明（zip）。包内不含数据库口令、JWT 密钥、LLM Key 或密码哈希。</p>
+        <div class="toolbar">
+          <input id="exportPwd" type="password" placeholder="输入当前密码确认" autocomplete="current-password">
+          <button class="primary" id="exportPkg">生成并下载</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">修改密码</div>
+        <label>当前密码</label><input id="oldPwd" type="password">
+        <label>新密码</label><input id="newPwd" type="password" placeholder="至少 8 位">
+        <label>确认新密码</label><input id="newPwd2" type="password">
+        <button class="primary" id="changePwd">保存</button>
+      </div>
+
     {{ else }}
       <div class="panel">
         <div class="panel-title">{{ .Title }}</div>
@@ -215,6 +384,24 @@
     </div>
   </main>
 </div>
+
+
+      <div class="modal-mask" id="libModal" style="display:none">
+        <div class="modal">
+          <div class="modal-head"><span id="libModalTitle">新建发布库</span><button class="modal-x" id="libClose">×</button></div>
+          <div class="modal-body">
+            <input type="hidden" id="libId" value="0">
+            <label>名称</label><input id="libName" placeholder="例如：软件下载 / 内部工具">
+            <label>描述</label><input id="libDesc" placeholder="可选">
+            <label>排序</label><input id="libSort" type="number" value="0">
+            <div class="checks">
+              <label><input type="checkbox" id="libWeb" checked> 网页端可见</label>
+              <label><input type="checkbox" id="libClient" checked> 客户端可见</label>
+            </div>
+            <div class="btn-row"><button class="primary" id="libSave">保存</button><button id="libCancel">取消</button></div>
+          </div>
+        </div>
+      </div>
 
 <script src="/console/assets/admin.js"></script>
 </body>

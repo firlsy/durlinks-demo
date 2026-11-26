@@ -62,6 +62,14 @@ type adminData struct {
 
 	BackQuery string
 
+	CatKind      string
+	CatValues    []string
+	CatCount     int
+	Users        []UserDto
+	MyMfa        bool
+	LlmConfigs   []LlmConfigDto
+	IsSuperAdmin bool
+
 	base url.Values
 }
 
@@ -157,6 +165,47 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch view {
+	case "categories":
+		kind := strings.ToLower(strings.TrimSpace(qs.Get("kind")))
+		if _, ok := categoryKinds[kind]; !ok {
+			kind = "group"
+		}
+		data.CatKind = kind
+		if cats, err := a.categoryOptions(); err == nil {
+			data.Cats = cats
+			switch kind {
+			case "platform":
+				data.CatValues = cats.Platforms
+			case "tag":
+				data.CatValues = cats.Tags
+			case "type":
+				data.CatValues = cats.LinkTypes
+			default:
+				data.CatValues = cats.Groups
+			}
+			data.CatCount = len(data.CatValues)
+		}
+
+	case "users":
+		users, err := a.listUsers()
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		data.Users = users
+
+	case "llm":
+		cfgs, err := a.queryLlmConfigs(` ORDER BY "IsDefault" DESC, "Id"`)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		out := make([]LlmConfigDto, 0, len(cfgs))
+		for i := range cfgs {
+			out = append(out, toLlmDto(&cfgs[i]))
+		}
+		data.LlmConfigs = out
+
 	case "dashboard":
 		stats, err := a.queryStatsMap()
 		if err != nil {
@@ -246,6 +295,9 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 		data.BackQuery = "/console?" + back.Encode()
 	}
 
+	data.IsSuperAdmin = claims.Role == "SuperAdmin"
+	data.MyMfa = user.MfaEnabled
+
 	var buf bytes.Buffer
 	if err := adminTemplate.Execute(&buf, data); err != nil {
 		a.logf("渲染管理端失败 view=%s: %v", view, err)
@@ -291,6 +343,32 @@ func (a *App) findLinkDto(id int) *LinkDto {
 		return nil
 	}
 	return &items[0]
+}
+
+// listUsers 用户列表（与 /api/auth/users 同源）。
+func (a *App) listUsers() ([]UserDto, error) {
+	rows, err := a.db.sql.Query(`SELECT "Id","Username","Role","MfaEnabled","CreatedAt" FROM "Users" ORDER BY "Id"`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []UserDto{}
+	for rows.Next() {
+		var (
+			id, role  int
+			username  string
+			mfa       any
+			createdAt any
+		)
+		if err := rows.Scan(&id, &username, &role, &mfa, &createdAt); err != nil {
+			return nil, err
+		}
+		out = append(out, UserDto{
+			ID: id, Username: username, Role: UserRole(role).String(),
+			MfaEnabled: scanBool(mfa), CreatedAt: isoTime(scanTime(createdAt)),
+		})
+	}
+	return out, rows.Err()
 }
 
 // categoryOptions 读取四类字典（与 /api/admin/categories 同源）。

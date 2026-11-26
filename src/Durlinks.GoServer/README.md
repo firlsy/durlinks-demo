@@ -63,8 +63,10 @@ wwwroot-admin/       管理端静态站（含 login.html）
 
 交互用普通 GET 表单 + 链接（筛选、翻页、库切换都体现在 URL 上，可分享可后退），行操作（隐藏/删除/AI 补料）与编辑保存由一小段内联 JS 调既有 API。
 
-> 管理端 Go 版当前覆盖：数据看板、发布管理（发布库切换、搜索、来源筛选、分页、行内编辑、隐藏/删除/AI 补料）。
-> 分组管理、用户、大模型、账号设置四个页签仍是占位提示，需要完整功能时把 `Web.AdminMode` 设为 `static`。
+> 管理端 Go 版已覆盖：数据看板、发布管理（发布库增删改与渠道切换、搜索、来源筛选、分页、行内编辑、
+> 隐藏/删除/AI 补料）、分组管理（分组/平台/标签/链接形式四类字典的增删改）、用户、大模型（提供商 CRUD、
+> 设默认、连通性测试）、账号设置（MFA 开关、导出数据包、改密码）。
+> 尚未迁移：导入弹窗（Excel / 粘贴）、批量移动复制。需要这两项时把 `Web.AdminMode` 设为 `static`。
 
 环境变量优先：`DURLINKS_DB_PROVIDER`、`DURLINKS_DB_PATH`、`DURLINKS_POSTGRES`、`DURLINKS_PORT_PUBLIC`、`DURLINKS_PORT_ADMIN`、`DURLINKS_JWT_SECRET`、`DURLINKS_HOST`、`DURLINKS_STATIC_USER`、`DURLINKS_STATIC_ADMIN`、`DURLINKS_ADMIN_PASSWORD`、`DURLINKS_ENV`。
 
