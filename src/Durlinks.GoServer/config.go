@@ -34,8 +34,10 @@ type Config struct {
 		Secret string `json:"secret"`
 	} `json:"jwt"`
 	// Web.Mode: go=Go 服务端直接渲染用户端（默认，不依赖 .NET 产物）；static=托管 wwwroot-user 静态站
+	// Web.AdminMode: 同上，作用于管理端（/console）
 	Web struct {
-		Mode string `json:"mode"`
+		Mode      string `json:"mode"`
+		AdminMode string `json:"adminMode"`
 	} `json:"web"`
 	BatchEnrich struct {
 		MaxItems      int `json:"maxItems"`
@@ -55,6 +57,7 @@ func LoadConfig(path string) (*Config, error) {
 	c.StaticFiles.UserDir = "wwwroot-user"
 	c.StaticFiles.AdminDir = "wwwroot-admin"
 	c.Web.Mode = "go"
+	c.Web.AdminMode = "go"
 	c.BatchEnrich.MaxItems = 200000
 	c.BatchEnrich.MinIntervalMs = 100
 
@@ -121,6 +124,7 @@ func LoadConfig(path string) (*Config, error) {
 	c.Web.Mode = strings.ToLower(strings.TrimSpace(c.Web.Mode))
 	if c.Web.Mode != "static" {
 		c.Web.Mode = "go"
+		c.Web.AdminMode = "go"
 	}
 	return c, nil
 }

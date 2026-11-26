@@ -20,17 +20,18 @@ type ctxKey int
 const claimsKey ctxKey = 1
 
 type App struct {
-	db         *DB
-	auth       *Auth
-	captcha    *CaptchaStore
-	loginGuard *loginLimiter
-	cfg        *Config
-	baseDir    string
-	webMode    string
-	userSite   string
-	adminSite  string
-	publicPort int
-	adminPort  int
+	db           *DB
+	auth         *Auth
+	captcha      *CaptchaStore
+	loginGuard   *loginLimiter
+	cfg          *Config
+	baseDir      string
+	webMode      string
+	adminWebMode string
+	userSite     string
+	adminSite    string
+	publicPort   int
+	adminPort    int
 }
 
 func (a *App) logf(format string, args ...any) { log.Printf(format, args...) }
@@ -109,17 +110,18 @@ func main() {
 	logf("数据库就绪：%s %s", provider, target)
 
 	app := &App{
-		db:         db,
-		auth:       NewAuth(secret),
-		captcha:    NewCaptchaStore(),
-		loginGuard: newLoginLimiter(),
-		cfg:        cfg,
-		webMode:    cfg.Web.Mode,
-		baseDir:    base,
-		userSite:   ResolvePath(base, cfg.StaticFiles.UserDir),
-		adminSite:  ResolvePath(base, cfg.StaticFiles.AdminDir),
-		publicPort: cfg.Ports.Public,
-		adminPort:  cfg.Ports.Admin,
+		db:           db,
+		auth:         NewAuth(secret),
+		captcha:      NewCaptchaStore(),
+		loginGuard:   newLoginLimiter(),
+		cfg:          cfg,
+		webMode:      cfg.Web.Mode,
+		adminWebMode: cfg.Web.AdminMode,
+		baseDir:      base,
+		userSite:     ResolvePath(base, cfg.StaticFiles.UserDir),
+		adminSite:    ResolvePath(base, cfg.StaticFiles.AdminDir),
+		publicPort:   cfg.Ports.Public,
+		adminPort:    cfg.Ports.Admin,
 	}
 
 	listenHost := cfg.Kestrel.Host
@@ -424,9 +426,24 @@ func (a *App) publicHandler() http.Handler {
 func (a *App) adminHandler() http.Handler {
 	mux := a.apiRoutes(true)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(strings.ToLower(r.URL.Path), "/api") {
+		path := r.URL.Path
+		if strings.HasPrefix(strings.ToLower(path), "/api") {
 			mux.ServeHTTP(w, r)
 			return
+		}
+		// go 模式：管理控制台由 Go 渲染（模板 + embed），不再依赖 Blazor 产物
+		if a.adminWebMode == "go" {
+			switch {
+			case path == "/console" || path == "/console/":
+				a.handleConsole(w, r)
+				return
+			case path == "/console/logout":
+				a.handleConsoleLogout(w, r)
+				return
+			case strings.HasPrefix(path, "/console/assets/"):
+				a.handleAdminAssets(w, r)
+				return
+			}
 		}
 		a.staticHandler(a.adminSite, false).ServeHTTP(w, r)
 	})

@@ -52,14 +52,19 @@ wwwroot-admin/       管理端静态站（含 login.html）
 }
 ```
 
-`Web.Mode` 决定用户端首页怎么来：
+`Web.Mode` / `Web.AdminMode` 决定页面怎么来：
 
-| 值 | 行为 | 依赖 |
-| --- | --- | --- |
-| `go`（默认） | Go 用 `html/template` 直接渲染首页，模板与 CSS 用 `embed` 打进二进制 | **零前端产物**，首屏约 36KB |
-| `static` | 回退到托管 `wwwroot-user` 里的 Blazor WASM 产物 | 需要跑过 `dotnet publish`，首屏要拉 27MB |
+| 键 | 值 | 行为 | 依赖 |
+| --- | --- | --- | --- |
+| `Web.Mode` | `go`（默认） | Go 用 `html/template` 渲染用户端首页，模板与 CSS 用 `embed` 打进二进制 | **零前端产物**，首屏约 36KB |
+| | `static` | 回退到托管 `wwwroot-user` 里的 Blazor WASM 产物 | 需要跑过 `dotnet publish`，首屏要拉 27MB |
+| `Web.AdminMode` | `go`（默认） | Go 渲染管理控制台 `/console`（模板 + `embed`），页面鉴权走登录时下发的 HttpOnly cookie | **零前端产物** |
+| | `static` | 回退到托管 `wwwroot-admin` 的 Blazor 版控制台 | 需要 `wwwroot-admin` 产物 |
 
-交互用普通 GET 表单 + 链接（筛选、翻页、库切换都体现在 URL 上，可分享可后退），只有「复制提取码」用了一小段内联 JS。
+交互用普通 GET 表单 + 链接（筛选、翻页、库切换都体现在 URL 上，可分享可后退），行操作（隐藏/删除/AI 补料）与编辑保存由一小段内联 JS 调既有 API。
+
+> 管理端 Go 版当前覆盖：数据看板、发布管理（发布库切换、搜索、来源筛选、分页、行内编辑、隐藏/删除/AI 补料）。
+> 分组管理、用户、大模型、账号设置四个页签仍是占位提示，需要完整功能时把 `Web.AdminMode` 设为 `static`。
 
 环境变量优先：`DURLINKS_DB_PROVIDER`、`DURLINKS_DB_PATH`、`DURLINKS_POSTGRES`、`DURLINKS_PORT_PUBLIC`、`DURLINKS_PORT_ADMIN`、`DURLINKS_JWT_SECRET`、`DURLINKS_HOST`、`DURLINKS_STATIC_USER`、`DURLINKS_STATIC_ADMIN`、`DURLINKS_ADMIN_PASSWORD`、`DURLINKS_ENV`。
 

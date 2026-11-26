@@ -35,6 +35,11 @@ func (d *DB) buildLinkWhere(q LinkQuery, public bool) (string, []any) {
 		conds = append(conds, `l."IsDeleted" = `+d.False())
 	}
 
+	if q.ID > 0 {
+		conds = append(conds, `l."Id" = ?`)
+		args = append(args, q.ID)
+	}
+
 	if q.LibraryID != nil && *q.LibraryID > 0 {
 		conds = append(conds, `l."LibraryId" = ?`)
 		args = append(args, *q.LibraryID)

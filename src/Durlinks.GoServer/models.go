@@ -404,6 +404,7 @@ type DedupeSampleDto struct {
 }
 
 type LinkQuery struct {
+	ID            int
 	Q             string
 	Group         string
 	Tag           string

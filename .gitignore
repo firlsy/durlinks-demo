@@ -45,3 +45,4 @@ appsettings.Production.json
 .tmp-scan/
 .tmp-win-publish/
 node_modules/
+.backup/
