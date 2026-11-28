@@ -76,7 +76,8 @@
     location.href = u.toString();
   }
   window.applySearch = function (v) { withParam('q', (v || '').trim(), true); };
-  window.applySrc = function (v) { withParam('src', v, true); };
+  window.applyFilter = function (k, v) { withParam(k, (v || '').trim(), true); };
+  window.applySrc = function (v) { window.applyFilter('src', v); };
   window.applySize = function (v) { withParam('size', v, true); };
   window.applyPage = function (v) { withParam('page', v, false); };
 
@@ -87,8 +88,11 @@
     return out;
   }
   function refreshSel() {
+    var ids = selectedIds();
     var el = document.getElementById('selCount');
-    if (el) el.textContent = String(selectedIds().length);
+    if (el) el.textContent = String(ids.length);
+    var scope = document.getElementById('enrichScope');
+    if (scope) scope.textContent = ids.length ? ('✦ AI 补料（已选 ' + ids.length + ' 条）') : '✦ AI 补料';
     var all = document.getElementById('checkAll');
     if (!all) return;
     var boxes = document.querySelectorAll('.row-check'), on = 0;
@@ -169,6 +173,31 @@
     location.href = '/api/admin/ai/enrich/export' + (lib ? '?libraryId=' + lib : '');
   };
 
+  // ---------- AI 补料帮助气泡 ----------
+  function closeEnrichHelp() {
+    var pop = document.getElementById('enrichHelpPop');
+    var btn = document.getElementById('enrichHelp');
+    if (!pop || !btn) return;
+    pop.style.display = 'none';
+    btn.setAttribute('aria-expanded', 'false');
+  }
+  window.toggleEnrichHelp = function (e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    var pop = document.getElementById('enrichHelpPop');
+    var btn = document.getElementById('enrichHelp');
+    if (!pop || !btn) return;
+    var show = pop.style.display !== 'block';
+    pop.style.display = show ? 'block' : 'none';
+    btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+  };
+  document.addEventListener('click', function (e) {
+    var btn = document.getElementById('enrichHelp');
+    if (btn && !btn.contains(e.target)) closeEnrichHelp();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeEnrichHelp();
+  });
+
   // ---------- 批量 AI 补料 ----------
   function pollEnrich() {
     var bar = document.getElementById('enrichProgress');
@@ -180,7 +209,8 @@
         .then(function (s) {
           if (bar) {
             bar.style.display = '';
-            bar.textContent = s.processed + '/' + s.total + '  ✓' + s.succeeded + '  ✗' + s.failed + '  ⊘' + s.skipped +
+            bar.textContent = (s.selected ? '已选 ' + s.selected + ' · ' : '') +
+              s.processed + '/' + s.total + '  ✓' + s.succeeded + '  ✗' + s.failed + '  ⊘' + s.skipped +
               (s.message ? '  ' + s.message : '');
           }
           if (cancelBtn) cancelBtn.style.display = s.running ? '' : 'none';
@@ -193,18 +223,26 @@
     tick();
   }
   window.startEnrich = function () {
+    var ids = selectedIds(); // 表格勾选优先：只补选中的链接
     var lim = Number((document.getElementById('enrichLimit') || {}).value || 0);
     if (!(lim > 0)) lim = 100;
     if (lim > 100000) lim = 100000;
     var mode = (document.getElementById('enrichMode') || {}).value || 'missing';
     var run = function () {
-      api('/api/admin/ai/enrich/batch', 'POST', { mode: mode, limit: lim, concurrency: 3 }).then(function (r) {
+      var payload = ids.length
+        ? { linkIds: ids, mode: mode, concurrency: 3 }
+        : { mode: mode, limit: lim, concurrency: 3 };
+      api('/api/admin/ai/enrich/batch', 'POST', payload).then(function (r) {
         if (!r.ok) { flash(r.data.message || '启动失败', true); return; }
         pollEnrich();
       });
     };
-    if (mode === 'all') ask('批量补料（全部）', '「全部」会覆盖已有摘要并追加标签，确定继续？', 'confirm', '', run);
-    else run();
+    if (mode === 'all') {
+      var msg = ids.length
+        ? '已选 ' + ids.length + ' 条，将覆盖这 ' + ids.length + ' 条的已有摘要并追加标签，确定继续？'
+        : '「全部」会覆盖已有摘要并追加标签，确定继续？';
+      ask('批量补料（全部）', msg, 'confirm', '', run);
+    } else run();
   };
   window.cancelEnrich = function () {
     api('/api/admin/ai/enrich/batch/cancel', 'POST').then(function () { pollEnrich(); });
@@ -755,6 +793,14 @@
       });
     });
   };
+  window.normalizeTags = function () {
+    ask('整理标签', '将同义标签合并为规范名，并清理组织名、域名、孤立数字等噪声标签；已关联链接会自动迁到规范标签。确定继续？', 'confirm', '', function () {
+      api('/api/admin/categories/tags/normalize', 'POST', {}).then(function (r) {
+        if (r.ok) reloadSoon(r.data.message || '标签已整理');
+        else show('catMsg', r.data.message || '整理失败');
+      });
+    });
+  };
   refreshCatSel();
 
   // ---------- 用户 ----------
@@ -1065,4 +1111,77 @@
       }
     }).catch(function () { btn.disabled = false; btn.textContent = '保存'; });
   };
+  // ---------- 链接表格：拖动列边框调整列宽 ----------
+  (function initLinkColumnResize() {
+    var table = document.querySelector('.links-grid');
+    if (!table) return;
+    var cols = table.querySelectorAll('colgroup col');
+    var heads = table.querySelectorAll('thead th');
+    if (!cols.length || cols.length !== heads.length) return;
+
+    var STORE_KEY = 'durlinks_link_col_widths';
+    var defaults = [], i;
+    for (i = 0; i < heads.length; i++) defaults.push(Math.round(heads[i].getBoundingClientRect().width));
+
+    function findHandle(target) {
+      while (target && target !== table) {
+        if (target.classList && target.classList.contains('col-resizer')) return target;
+        target = target.parentNode;
+      }
+      return null;
+    }
+    function widthsNow() {
+      var out = [];
+      for (var j = 0; j < heads.length; j++) out.push(Math.round(heads[j].getBoundingClientRect().width));
+      return out;
+    }
+    function applyWidths(list) {
+      for (var j = 0; j < cols.length; j++) {
+        if (list[j] > 0) cols[j].style.width = list[j] + 'px';
+      }
+    }
+
+    for (i = 0; i < heads.length; i++) {
+      var grip = document.createElement('span');
+      grip.className = 'col-resizer';
+      grip.setAttribute('data-idx', String(i));
+      grip.title = '拖动调整列宽，双击恢复默认';
+      heads[i].appendChild(grip);
+    }
+
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+      if (Array.isArray(saved) && saved.length === cols.length) applyWidths(saved);
+    } catch (e) {}
+
+    var drag = null;
+    table.addEventListener('mousedown', function (e) {
+      var handle = findHandle(e.target);
+      if (!handle) return;
+      e.preventDefault();
+      var idx = Number(handle.getAttribute('data-idx'));
+      drag = { idx: idx, startX: e.clientX, startWidth: Math.round(heads[idx].getBoundingClientRect().width), widths: widthsNow() };
+      document.body.classList.add('col-resizing');
+      heads[idx].classList.add('resizing');
+    });
+    document.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      var min = drag.idx === 0 ? 28 : (drag.idx === cols.length - 1 ? 90 : 48);
+      drag.widths[drag.idx] = Math.max(min, drag.startWidth + e.clientX - drag.startX);
+      applyWidths(drag.widths);
+    });
+    document.addEventListener('mouseup', function () {
+      if (!drag) return;
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(drag.widths)); } catch (e) {}
+      document.body.classList.remove('col-resizing');
+      heads[drag.idx].classList.remove('resizing');
+      drag = null;
+    });
+    table.addEventListener('dblclick', function (e) {
+      if (!findHandle(e.target)) return;
+      e.preventDefault();
+      applyWidths(defaults);
+      try { localStorage.removeItem(STORE_KEY); } catch (err) {}
+    });
+  })();
 })();

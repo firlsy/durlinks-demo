@@ -25,7 +25,8 @@ secrets.env
 appsettings.Production.json
 
 # 本地工作记忆与内部资料（含部署细节/口令，禁止入库）
-.workbuddy/memory/
+# 整个 .workbuddy/ 目录都不入库：记忆日志、会话上下文、临时配置一律排除
+.workbuddy/
 .local-docs/
 
 # Go 服务端：本地构建与部署目录

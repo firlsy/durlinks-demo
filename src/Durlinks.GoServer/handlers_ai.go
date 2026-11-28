@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -159,14 +161,152 @@ type enrichResult struct {
 	Summary string
 }
 
-// enrichOne 为单条链接生成标签与摘要（提示词与 C# 版一致）。
+var (
+	tagBareVersionRE = regexp.MustCompile(`^(?:\d+(?:\.\d+)*|版本\d+(?:\.\d+)*)$`)
+	// 组织名、站点名、状态词都不适合做内容标签；它们的存在会让标签库迅速膨胀。
+	tagNoiseRE = regexp.MustCompile(`(?i)(基金会|社区|有限公司|股份|科技|软件|ltd|inc|llc|gmbh|co\.?kg|corporation|company|team|project|foundation|systems|solutions|official|官方|https?|www\.|镜像站|镜像源|下载站)`)
+	tagGenericRE = regexp.MustCompile(`(?i)^(下载|镜像|镜像站|官网|普通网址|网址|链接|网络|repo|org|com|net|html|iso|img|vhd|qcow2|下载镜像|安装镜像|系统安装镜像|启动安装镜像|云服务器镜像|最新|稳定版|正式版|滚动版|有效|待验证|已归档|需授权|常用|linux发行版|linux 发行版|dvd)$`)
+	// 把长期积累的同义/带组织后缀标签收敛到统一名称。
+	tagCanonical = map[string]string{
+		"arm64": "aarch64", "amd64": "x86_64", "x64": "x86_64", "x86-64": "x86_64",
+		"debianproject（spi）": "Debian", "debianproject(spi)": "Debian",
+		"canonical ltd.": "Ubuntu", "canonical ltd": "Ubuntu", "canonicalltd.": "Ubuntu", "canonicalltd": "Ubuntu",
+		"openatomopeneuler（开放原子开源基金会）": "openEuler",
+		"rockyenterprisesoftwarefoundation": "Rocky Linux",
+		"almalinuxosfoundation": "AlmaLinux",
+		"archlinux社区": "Arch Linux",
+		"thefreebsdproject": "FreeBSD",
+		"fedoraproject（redhat赞助）": "Fedora",
+		"linuxmintteam": "Linux Mint",
+		"suse/opensuseproject": "openSUSE",
+		"麒麟软件有限公司": "Kylin",
+		"redhat/centosproject": "CentOS",
+		"腾讯云": "Tencent Cloud",
+		"ixsystems·inc.": "TrueNAS",
+		"武汉深之度科技有限公司": "Deepin",
+		"统信软件技术有限公司": "UOS",
+		"proxmoxserversolutionsgmbh": "Proxmox VE",
+		"offensivesecurity": "Kali Linux",
+		"阿里云计算有限公司": "Alibaba Cloud Linux",
+		"manjarogmbh&co.kg": "Manjaro",
+		"飞牛网络科技（深圳）有限公司": "飞牛 NAS",
+		"dvd": "DVD ISO", "dvd镜像": "DVD ISO", "dvd安装镜像": "DVD ISO", "dvd iso": "DVD ISO",
+		"iso镜像": "ISO", "iso": "ISO",
+		"netinst安装镜像": "Netinst ISO", "网络安装镜像": "Netinst ISO", "网络安装": "Netinst ISO",
+		"minimal安装镜像": "Minimal ISO", "最小化安装": "Minimal ISO", "最小安装": "Minimal ISO",
+		"最小安装iso": "Minimal ISO", "minimal镜像": "Minimal ISO", "minimal iso": "Minimal ISO",
+		"almalinux 10.2": "AlmaLinux 10", "almalinux 10.3": "AlmaLinux 10",
+		"alibaba cloud linux 2": "Alibaba Cloud Linux", "alibaba cloud linux 3": "Alibaba Cloud Linux",
+		"alibaba cloud linux 4": "Alibaba Cloud Linux",
+	}
+)
+
+// cleanTag 先做规范名映射，再做空白/标点清理；映射必须在噪声过滤之前，
+// 否则「ArchLinux社区」这类标签会被整条丢弃，而不是收敛成「Arch Linux」。
+func cleanTag(raw string) string {
+	name := strings.TrimSpace(raw)
+	name = strings.Trim(name, `"'“”‘’[](){}，,。;；:：`)
+	name = strings.Join(strings.Fields(name), " ")
+	if name == "" {
+		return ""
+	}
+	if canonical, ok := tagCanonical[strings.ToLower(name)]; ok {
+		return canonical
+	}
+	return name
+}
+
+// normalizeTag 判断一个标签是否应该进入标签库，并返回规范名；返回空表示丢弃。
+func normalizeTag(raw string) string {
+	name := cleanTag(raw)
+	if name == "" {
+		return ""
+	}
+	if tagBareVersionRE.MatchString(name) || tagNoiseRE.MatchString(name) || tagGenericRE.MatchString(name) {
+		return ""
+	}
+	if strings.ContainsAny(name, "/\\") || strings.Contains(name, "://") {
+		return ""
+	}
+	return name
+}
+
+// tagWorkflowKeep 是人工维护的状态标签，不属于 LLM 内容标签；整理历史标签时必须保留。
+var tagWorkflowKeep = map[string]bool{
+	"待验证": true, "稳定版": true, "已归档": true, "有效": true,
+	"需授权": true, "正式版": true, "滚动版": true, "最新": true, "常用": true, "商业版": true,
+}
+
+// normalizeExistingTag 与 normalizeTag 的区别：保留人工状态标签，不把它们当成噪声删除。
+func normalizeExistingTag(raw string) string {
+	name := strings.TrimSpace(raw)
+	if tagWorkflowKeep[strings.ToLower(name)] {
+		return name
+	}
+	return normalizeTag(raw)
+}
+
+// normalizeTags 把模型给出的标签收敛成少量、规范、互不包含的标签。
+func normalizeTags(raw []string, max int) []string {
+	type candidate struct {
+		name string
+		key  string
+	}
+	var candidates []candidate
+	seen := map[string]bool{}
+	for _, t := range raw {
+		name := normalizeTag(t)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		candidates = append(candidates, candidate{name: name, key: key})
+	}
+
+	// 互相包含的标签只留更具体的一个：AlmaLinux + AlmaLinux 10 => AlmaLinux 10。
+	kept := make([]candidate, 0, len(candidates))
+	for i, c := range candidates {
+		redundant := false
+		for j, other := range candidates {
+			if i == j || len(other.key) <= len(c.key) {
+				continue
+			}
+			if strings.HasPrefix(other.key, c.key+" ") {
+				redundant = true
+				break
+			}
+		}
+		if !redundant {
+			kept = append(kept, c)
+		}
+	}
+	if max > 0 && len(kept) > max {
+		kept = kept[:max]
+	}
+	out := make([]string, 0, len(kept))
+	for _, c := range kept {
+		out = append(out, c.name)
+	}
+	return out
+}
+
+// enrichOne 为单条链接生成标签与摘要。
 func (a *App) enrichOne(ctx context.Context, cfg *LlmConfig, title, linkURL, remark string) (enrichResult, error) {
 	schema := `{"tags":["标签1","标签2","标签3"],"summary":"一句话摘要"}`
-	prompt := "为下面的链接生成标签和一句话摘要，输出 JSON（只输出 JSON）：\n" +
-		schema + "\n名称：" + title + "\n链接：" + linkURL + "\n备注：" + remark +
-		"\n标签最多5个，摘要不超过50字。"
+	prompt := "请依据【名称】和【链接指向的实际内容】为这条下载链接生成标签与摘要。\n" +
+		"标签规则：\n" +
+		"1. 最多4个短标签，只描述资源本身：项目/发行版名（AlmaLinux、Debian、Windows、Chrome）、大版本（AlmaLinux 10，禁止单独写 10）、架构（x86_64、aarch64）、镜像或安装包类型（DVD ISO、Netinst ISO、Minimal ISO、QCOW2、VHD）。\n" +
+		"2. 不要输出公司名、基金会、社区、项目组、域名、镜像站名、状态词（稳定/最新/待验证/有效/归档）、孤立数字或泛词（下载、镜像、官网、Linux发行版）。\n" +
+		"3. 名称优先，链接只用于补充确认版本、架构和镜像形态；两者不一致时以名称为准。\n" +
+		"4. 标签之间不要互相包含，同类只保留最具体的一个。\n" +
+		"摘要：不超过40字，说明这是什么资源，尽量包含项目名、版本、架构或镜像类型中可确认的信息。\n" +
+		"只输出 JSON：" + schema + "\n\n名称：" + title + "\n链接：" + linkURL + "\n备注：" + remark
 
-	text, err := a.callChat(ctx, cfg, "你是信息整理助手，只输出合法 JSON。", prompt, 600)
+	text, err := a.callChat(ctx, cfg, "你是软件发行版与下载资源整理助手，只输出合法 JSON，不要解释。", prompt, 600)
 	if err != nil {
 		return enrichResult{}, err
 	}
@@ -177,20 +317,10 @@ func (a *App) enrichOne(ctx context.Context, cfg *LlmConfig, title, linkURL, rem
 	if err := json.Unmarshal([]byte(extractJSONBlock(text)), &parsed); err != nil {
 		return enrichResult{}, fmt.Errorf("解析模型输出失败: %w", err)
 	}
-	out := enrichResult{Summary: strings.TrimSpace(parsed.Summary)}
-	seen := map[string]bool{}
-	for _, t := range parsed.Tags {
-		name := strings.TrimSpace(t)
-		if name == "" || seen[strings.ToLower(name)] {
-			continue
-		}
-		seen[strings.ToLower(name)] = true
-		out.Tags = append(out.Tags, name)
-		if len(out.Tags) >= 5 {
-			break
-		}
-	}
-	return out, nil
+	return enrichResult{
+		Tags:    normalizeTags(parsed.Tags, 4),
+		Summary: strings.TrimSpace(parsed.Summary),
+	}, nil
 }
 
 // defaultLLMConfig 取默认可用配置：优先 IsDefault，其次最早创建。
@@ -400,10 +530,30 @@ func (a *App) handleStartBatchEnrich(w http.ResponseWriter, r *http.Request) {
 	}
 	concurrency = clamp(concurrency, 1, 8)
 
+	// 表格勾选优先：只补选中的 ID，忽略「条数」上限
+	var linkIDs []int
+	seen := make(map[int]bool, len(req.LinkIDs))
+	for _, id := range req.LinkIDs {
+		if id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		linkIDs = append(linkIDs, id)
+		if len(linkIDs) >= 200000 {
+			break
+		}
+	}
+
 	jobCtx, started := globalBatch.start(mode)
 	if !started {
 		writeJSON(w, http.StatusConflict, map[string]any{"message": "已有批量补料任务正在运行", "status": globalBatch.snapshot()})
 		return
+	}
+	if len(linkIDs) > 0 {
+		globalBatch.update(func(s *BatchEnrichStatus) {
+			s.Selected = len(linkIDs)
+			s.Message = fmt.Sprintf("已选 %d 条，准备中…", len(linkIDs))
+		})
 	}
 
 	go func() {
@@ -417,23 +567,36 @@ func (a *App) handleStartBatchEnrich(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}()
-		a.runBatchEnrich(jobCtx, cfg, mode, limit, concurrency, req.LibraryID)
+		a.runBatchEnrich(jobCtx, cfg, mode, limit, concurrency, req.LibraryID, linkIDs)
 	}()
 
 	writeOK(w, map[string]any{"started": true, "status": globalBatch.snapshot()})
 }
 
-// runBatchEnrich 拉取候选链接后按并发度消费。
-func (a *App) runBatchEnrich(ctx context.Context, cfg *LlmConfig, mode string, limit, concurrency, libraryID int) {
+// runBatchEnrich 拉取候选链接后按并发度消费。linkIDs 非空时只处理表格勾选的链接。
+func (a *App) runBatchEnrich(ctx context.Context, cfg *LlmConfig, mode string, limit, concurrency, libraryID int, linkIDs []int) {
 	cond := `"IsDeleted" = ` + a.db.False()
+	args := make([]any, 0, len(linkIDs)+1)
 	if libraryID > 0 {
 		cond += fmt.Sprintf(` AND "LibraryId" = %d`, libraryID)
+	}
+	if len(linkIDs) > 0 {
+		marks := make([]string, len(linkIDs))
+		for i, id := range linkIDs {
+			marks[i] = "?"
+			args = append(args, id)
+		}
+		cond += ` AND "Id" IN (` + strings.Join(marks, ",") + `)`
 	}
 	if mode == "missing" {
 		// 摘要为空 或 没有任何标签
 		cond += ` AND (COALESCE("Summary",'') = '' OR NOT EXISTS (SELECT 1 FROM "LinkTags" lt WHERE lt."LinkId" = "Links"."Id"))`
 	}
-	rows, err := a.db.sql.Query(a.db.Rebind(`SELECT "Id" FROM "Links" WHERE `+cond+` ORDER BY "SortOrder","Id" LIMIT ?`), limit)
+	queryLimit := limit
+	if len(linkIDs) > 0 {
+		queryLimit = len(linkIDs) // 勾选模式不受「条数」输入限制
+	}
+	rows, err := a.db.sql.Query(a.db.Rebind(`SELECT "Id" FROM "Links" WHERE `+cond+` ORDER BY "SortOrder","Id" LIMIT ?`), append(args, queryLimit)...)
 	if err != nil {
 		globalBatch.update(func(s *BatchEnrichStatus) {
 			s.Running = false
@@ -451,6 +614,15 @@ func (a *App) runBatchEnrich(ctx context.Context, cfg *LlmConfig, mode string, l
 		}
 	}
 	rows.Close()
+
+	// 勾选模式按用户勾选顺序处理，便于进度与选择一一对应
+	if len(linkIDs) > 0 {
+		order := make(map[int]int, len(linkIDs))
+		for i, id := range linkIDs {
+			order[id] = i
+		}
+		sort.SliceStable(ids, func(i, j int) bool { return order[ids[i]] < order[ids[j]] })
+	}
 
 	globalBatch.update(func(s *BatchEnrichStatus) {
 		s.Total = len(ids)

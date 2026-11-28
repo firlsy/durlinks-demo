@@ -383,6 +383,7 @@ func (a *App) apiRoutes(admin bool) *http.ServeMux {
 	mux.HandleFunc("PUT /api/admin/categories/{kind}", a.handleRenameCategory)
 	mux.HandleFunc("DELETE /api/admin/categories/{kind}", a.handleDeleteCategory)
 	mux.HandleFunc("POST /api/admin/categories/{kind}/batch-delete", a.handleBatchDeleteCategories)
+	mux.HandleFunc("POST /api/admin/categories/tags/normalize", a.handleNormalizeTags)
 
 	// LLM 配置
 	mux.HandleFunc("GET /api/admin/llm/configs", a.handleListLlmConfigs)

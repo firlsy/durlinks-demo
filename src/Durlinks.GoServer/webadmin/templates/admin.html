@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>durlinks-demo · 管理控制台</title>
-<link rel="stylesheet" href="/console/assets/admin.css?v=3">
+<link rel="stylesheet" href="/console/assets/admin.css?v=4">
 <link rel="icon" type="image/png" href="/console/assets/favicon.png">
 </head>
 <body>
@@ -12,11 +12,11 @@
 
 <div class="console{{ if .NavFolded }} nav-folded{{ end }}">
   <aside class="sidebar">
-    <button class="side-fold" id="navFold" title="收起/展开功能菜单">{{ if .NavFolded }}»{{ else }}«{{ end }}</button>
     <div class="side-brand">
       <div class="side-logo">DL</div>
       <div><div class="side-name">durlinks-demo <span class="ver">v1.8.26</span></div><div class="side-sub">管理控制台</div></div>
     </div>
+    <button class="side-fold" id="navFold" title="收起/展开功能菜单">{{ if .NavFolded }}»{{ else }}«{{ end }}</button>
     <div class="side-label">主菜单</div>
     <nav>
       <button class="{{ if eq .View "dashboard" }}active{{ end }}" onclick="go('{{ .Link "view" "dashboard" }}')"><span class="ico">▦</span>数据看板</button>
@@ -166,12 +166,32 @@
             </div>
 
             <div class="toolbar">
-              <input placeholder="搜索名称/链接…" value="{{ .Q }}" onkeydown="if(event.key==='Enter')applySearch(this.value)">
-              <select onchange="applySrc(this.value)">
-                <option value="">全部来源</option>
-                <option value="0"{{ if eq .Src "0" }} selected{{ end }}>人工导入</option>
-                <option value="1"{{ if eq .Src "1" }} selected{{ end }}>AI接入</option>
-              </select>
+              <div class="search-box">
+                <input id="searchInput" placeholder="搜索名称/链接…" value="{{ .Q }}" onkeydown="if(event.key==='Enter')applySearch(this.value)">
+                <button type="button" class="search-icon" title="搜索" aria-label="搜索" onclick="applySearch(document.getElementById('searchInput').value)">
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+              <button type="button" class="search-btn" title="搜索名称/链接" onclick="applySearch(document.getElementById('searchInput').value)">搜索</button>
+              <div class="filter-group" role="group" aria-label="链接筛选">
+                <select onchange="applyFilter('group', this.value)" title="按分组筛选">
+                  <option value="">全部分组</option>
+                  {{ range .Cats.Groups }}<option value="{{ . }}"{{ if eq . $.Group }} selected{{ end }}>{{ . }}</option>{{ end }}
+                </select>
+                <select onchange="applyFilter('tag', this.value)" title="按标签筛选">
+                  <option value="">全部标签</option>
+                  {{ range .Cats.Tags }}<option value="{{ . }}"{{ if eq . $.Tag }} selected{{ end }}>{{ . }}</option>{{ end }}
+                </select>
+                <select onchange="applyFilter('platform', this.value)" title="按平台筛选">
+                  <option value="">全部平台</option>
+                  {{ range .Cats.Platforms }}<option value="{{ . }}"{{ if eq . $.Platform }} selected{{ end }}>{{ . }}</option>{{ end }}
+                </select>
+                <select onchange="applyFilter('src', this.value)" title="按来源筛选">
+                  <option value="">全部来源</option>
+                  <option value="0"{{ if eq .Src "0" }} selected{{ end }}>人工导入</option>
+                  <option value="1"{{ if eq .Src "1" }} selected{{ end }}>AI接入</option>
+                </select>
+              </div>
               <button class="primary" onclick="openLinkNew()">+ 新建链接</button>
               <button onclick="openImport()">⇩ 导入</button>
               <span class="sel-count">已选 <b id="selCount">0</b></span>
@@ -182,8 +202,20 @@
               <button onclick="exportLinks()">导出</button>
             </div>
 
+            <div class="compact-rows">
             <div class="toolbar enrich-bar">
-              <span class="sel-count">✦ 批量 AI 补料（为无摘要/标签的链接生成标签与摘要）</span>
+              <span class="enrich-help" id="enrichHelp" tabindex="0" role="button" aria-label="AI 补料使用说明" aria-expanded="false" onclick="toggleEnrichHelp(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEnrichHelp(event);}">?
+                <span class="enrich-help-pop" id="enrichHelpPop" role="tooltip" onclick="event.stopPropagation()">
+                  <b>AI 补料使用说明</b>
+                  <ul>
+                    <li>先勾选表格中的链接：只补勾选的这些，“条数”设置会被忽略。</li>
+                    <li>未勾选时按“范围”补料：仅未补料 = 只处理缺摘要/标签的链接；全部 = 覆盖已有摘要并追加标签。</li>
+                    <li>“条数”是未勾选时的最多处理数量；补料中可点“取消”随时停止。</li>
+                    <li>AI 按名称与链接指向内容生成摘要和 2–4 个标准短标签；模型在“LLM 设置”中配置。</li>
+                  </ul>
+                </span>
+              </span>
+              <span class="sel-count" id="enrichScope" title="为无摘要/标签的链接生成标签与摘要">✦ AI 补料</span>
               <label style="font-size:12px;color:#64748b">范围
                 <select id="enrichMode" style="padding:3px 6px">
                   <option value="missing">仅未补料</option>
@@ -216,7 +248,9 @@
                 <span>条</span>
               </label>
             </div>
+            </div>
 
+            <div class="table-scroll">
             <table class="grid links-grid">
               <colgroup>
                 <col style="width:34px"><col style="width:16%"><col style="width:20%"><col style="width:17%">
@@ -250,6 +284,7 @@
               {{ end }}
               </tbody>
             </table>
+            </div>
 
             <div class="pager">
               <span class="total-line" style="margin:0">共 {{ .Total }} 条 · 第 {{ .Page }} / {{ .MaxPage }} 页 · 每页 {{ .PageSize }} 条</span>
@@ -298,6 +333,7 @@
               <span class="hint" id="catSelHint" style="display:none">已勾选 <b id="catSelCount">0</b> 项</span>
               <button class="danger-solid" id="catBatchDel" onclick="catBatchDelete()" style="display:none">批量删除</button>
               <button id="catClear" onclick="catClear()" style="display:none">清空选择</button>
+              {{ if eq .CatKind "tag" }}<button onclick="normalizeTags()" title="收敛同义标签并清理组织名、孤立数字等噪声标签">整理标签</button>{{ end }}
             </div>
             <p class="msg" id="catMsg" style="display:none"></p>
             <div class="cat-table-head">
@@ -734,6 +770,6 @@
   </main>
 </div>
 
-<script src="/console/assets/admin.js?v=3"></script>
+<script src="/console/assets/admin.js?v=4"></script>
 </body>
 </html>

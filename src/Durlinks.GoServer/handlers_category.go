@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -406,4 +407,135 @@ func strArgs(items []string) []any {
 		out[i] = v
 	}
 	return out
+}
+
+// handleNormalizeTags POST /api/admin/categories/tags/normalize
+// 整理历史标签：同义名收敛到一个规范名，噪声标签删除并把关联迁走。
+func (a *App) handleNormalizeTags(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "仅支持 POST")
+		return
+	}
+	tx, err := a.db.sql.Begin()
+	if err != nil {
+		writeInternalErr(w, err)
+		return
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`SELECT "Id", "Name" FROM "Tags" ORDER BY "Id"`)
+	if err != nil {
+		writeInternalErr(w, err)
+		return
+	}
+	type tagRecord struct {
+		id   int
+		name string
+	}
+	var tags []tagRecord
+	for rows.Next() {
+		var t tagRecord
+		if err := rows.Scan(&t.id, &t.name); err != nil {
+			rows.Close()
+			writeInternalErr(w, err)
+			return
+		}
+		tags = append(tags, t)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		writeInternalErr(w, err)
+		return
+	}
+
+	renamed, merged, removed := 0, 0, 0
+	for _, t := range tags {
+		norm := normalizeExistingTag(t.name)
+		if norm == "" {
+			if _, err := tx.Exec(a.db.Rebind(`DELETE FROM "LinkTags" WHERE "TagId" = ?`), t.id); err != nil {
+				writeInternalErr(w, err)
+				return
+			}
+			if _, err := tx.Exec(a.db.Rebind(`DELETE FROM "Tags" WHERE "Id" = ?`), t.id); err != nil {
+				writeInternalErr(w, err)
+				return
+			}
+			removed++
+			continue
+		}
+		if norm == t.name {
+			continue
+		}
+
+		var targetID int
+		err := tx.QueryRow(a.db.Rebind(`SELECT "Id" FROM "Tags" WHERE LOWER("Name") = LOWER(?) AND "Id" <> ? LIMIT 1`), norm, t.id).Scan(&targetID)
+		if err != nil && err != sql.ErrNoRows {
+			writeInternalErr(w, err)
+			return
+		}
+		if targetID == 0 {
+			if _, err := tx.Exec(a.db.Rebind(`UPDATE "Tags" SET "Name" = ? WHERE "Id" = ?`), norm, t.id); err != nil {
+				writeInternalErr(w, err)
+				return
+			}
+			renamed++
+			continue
+		}
+
+		linkRows, err := tx.Query(a.db.Rebind(`SELECT "LinkId" FROM "LinkTags" WHERE "TagId" = ?`), t.id)
+		if err != nil {
+			writeInternalErr(w, err)
+			return
+		}
+		var linkIDs []int
+		for linkRows.Next() {
+			var linkID int
+			if err := linkRows.Scan(&linkID); err != nil {
+				linkRows.Close()
+				writeInternalErr(w, err)
+				return
+			}
+			linkIDs = append(linkIDs, linkID)
+		}
+		linkRows.Close()
+		if err := linkRows.Err(); err != nil {
+			writeInternalErr(w, err)
+			return
+		}
+
+		for _, linkID := range linkIDs {
+			var exists int
+			err := tx.QueryRow(a.db.Rebind(`SELECT 1 FROM "LinkTags" WHERE "LinkId" = ? AND "TagId" = ? LIMIT 1`), linkID, targetID).Scan(&exists)
+			if err == sql.ErrNoRows {
+				if _, err := tx.Exec(a.db.Rebind(`INSERT INTO "LinkTags" ("LinkId", "TagId") VALUES (?, ?)`), linkID, targetID); err != nil {
+					writeInternalErr(w, err)
+					return
+				}
+			} else if err != nil {
+				writeInternalErr(w, err)
+				return
+			}
+		}
+		if _, err := tx.Exec(a.db.Rebind(`DELETE FROM "LinkTags" WHERE "TagId" = ?`), t.id); err != nil {
+			writeInternalErr(w, err)
+			return
+		}
+		if _, err := tx.Exec(a.db.Rebind(`DELETE FROM "Tags" WHERE "Id" = ?`), t.id); err != nil {
+			writeInternalErr(w, err)
+			return
+		}
+		merged++
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeInternalErr(w, err)
+		return
+	}
+	writeOK(w, map[string]any{
+		"ok":      true,
+		"renamed": renamed,
+		"merged":  merged,
+		"removed": removed,
+		"message": fmt.Sprintf("整理完成：规范 %d 项，合并 %d 项，删除 %d 项", renamed, merged, removed),
+	})
 }

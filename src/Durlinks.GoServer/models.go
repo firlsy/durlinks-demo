@@ -359,14 +359,16 @@ type ExcelImportStatus struct {
 
 type BatchEnrichRequest struct {
 	Mode        string `json:"mode"`        // missing=仅未补料（默认）/ all=全部
-	Limit       int    `json:"limit"`       // 本次最多处理条数，<=0 按 100
+	Limit       int    `json:"limit"`       // 本次最多处理条数，<=0 按 100；传了 linkIds 时忽略
 	Concurrency int    `json:"concurrency"` // 并发数 1-8，默认 3
 	LibraryID   int    `json:"libraryId"`   // 0=全部
+	LinkIDs     []int  `json:"linkIds"`     // 非空时只处理这些 ID（表格勾选）
 }
 
 type BatchEnrichStatus struct {
 	Running         bool    `json:"running"`
 	Mode            string  `json:"mode"`
+	Selected        int     `json:"selected"` // 通过表格勾选传入的条数，0 表示按范围/条数
 	Total           int     `json:"total"`
 	Processed       int     `json:"processed"`
 	Succeeded       int     `json:"succeeded"`

@@ -61,6 +61,9 @@ type adminData struct {
 
 	Q         string
 	Src       string
+	Group     string
+	Tag       string
+	Platform  string
 	Page      int
 	PageSize  int
 	Total     int
@@ -196,9 +199,13 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 		View: view, Title: navTitles[view],
 		User: claims.UniqueName, Role: claims.Role,
 		Initial: strings.ToUpper(substrRunes(claims.UniqueName, 0, 1)),
-		Q:       strings.TrimSpace(qs.Get("q")),
-		Src:     strings.TrimSpace(qs.Get("src")),
-		Page:    page, PageSize: size, PageSizes: adminPageSizes,
+		Q:        strings.TrimSpace(qs.Get("q")),
+		Src:      strings.TrimSpace(qs.Get("src")),
+		Group:    strings.TrimSpace(qs.Get("group")),
+		Tag:      strings.TrimSpace(qs.Get("tag")),
+		Platform: strings.TrimSpace(qs.Get("platform")),
+		Page:     page, PageSize: size, PageSizes: adminPageSizes,
+		NavFolded: qs.Get("nav") == "1",
 		base: qs,
 	}
 
@@ -315,6 +322,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 		lq := LinkQuery{
 			Q: data.Q, Channel: "web", Page: page, PageSize: size,
 			LibraryID: &libPtr,
+			Group: data.Group, Tag: data.Tag, Platform: data.Platform,
 		}
 		if data.Src == "0" || data.Src == "1" {
 			if n, err := strconv.Atoi(data.Src); err == nil {

@@ -14,6 +14,13 @@ Durlinks Windows 部署脚本
   install-service.bat    注册为 Windows 服务（开机自启 + 崩溃自动重启），需管理员
   uninstall-service.bat  卸载服务，需管理员
 
+端口占用处理
+  两个启动脚本都会先检查 8788/8789：
+    - 已经是本项目 durlinks-server.exe 在跑：提示“服务已在运行”并直接退出，不再重复启动；
+    - 被其他程序占用：打印占用进程 PID 并拒绝启动；
+    - 需要强制重启：加 -force，例如 start.bat -force 或 start-background.bat -force，
+      会先结束本项目的 durlinks-server.exe，再重新启动（不会误杀其他程序）。
+
 目录前提
   脚本按 deploy\windows\ 位置定位到 <项目根>\run\ 目录，需要里面有：
     durlinks-server.exe     Go 编译产物（deploy/go/build-local.sh 生成）
