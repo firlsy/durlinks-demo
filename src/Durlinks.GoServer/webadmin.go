@@ -173,6 +173,22 @@ func (a *App) authFromRequest(r *http.Request) (*User, *JWTClaims) {
 	return nil, nil
 }
 
+// handleAdminLoginPage GET / —— 管理端浏览器入口：未登录渲染登录页，已登录直接进控制台。
+func (a *App) handleAdminLoginPage(w http.ResponseWriter, r *http.Request) {
+	if u, _ := a.authFromRequest(r); u != nil {
+		http.Redirect(w, r, "/console", http.StatusFound)
+		return
+	}
+	data, err := adminAssets.ReadFile("webadmin/templates/login.html")
+	if err != nil {
+		http.Error(w, "登录页缺失", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
 // handleConsole GET /console —— 服务端渲染管理控制台。
 func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 	user, claims := a.authFromRequest(r)
@@ -198,7 +214,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 	data := adminData{
 		View: view, Title: navTitles[view],
 		User: claims.UniqueName, Role: claims.Role,
-		Initial: strings.ToUpper(substrRunes(claims.UniqueName, 0, 1)),
+		Initial:  strings.ToUpper(substrRunes(claims.UniqueName, 0, 1)),
 		Q:        strings.TrimSpace(qs.Get("q")),
 		Src:      strings.TrimSpace(qs.Get("src")),
 		Group:    strings.TrimSpace(qs.Get("group")),
@@ -206,7 +222,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 		Platform: strings.TrimSpace(qs.Get("platform")),
 		Page:     page, PageSize: size, PageSizes: adminPageSizes,
 		NavFolded: qs.Get("nav") == "1",
-		base: qs,
+		base:      qs,
 	}
 
 	switch view {
@@ -322,7 +338,7 @@ func (a *App) handleConsole(w http.ResponseWriter, r *http.Request) {
 		lq := LinkQuery{
 			Q: data.Q, Channel: "web", Page: page, PageSize: size,
 			LibraryID: &libPtr,
-			Group: data.Group, Tag: data.Tag, Platform: data.Platform,
+			Group:     data.Group, Tag: data.Tag, Platform: data.Platform,
 		}
 		if data.Src == "0" || data.Src == "1" {
 			if n, err := strconv.Atoi(data.Src); err == nil {

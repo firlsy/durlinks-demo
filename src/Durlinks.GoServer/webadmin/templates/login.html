@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DurLinks · 管理登录</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #e8efff 0%, #f6f8fc 45%, #eef1f6 100%);
+    color: #111827;
+  }
+  .card {
+    width: 380px; max-width: calc(100vw - 32px); background: #fff; border-radius: 16px;
+    border: 1px solid #e5e7eb; box-shadow: 0 18px 50px -20px rgba(30, 58, 138, .35);
+    padding: 30px 28px 26px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .logo {
+    width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: #fff; font-weight: 800;
+    font-size: 15px; letter-spacing: .5px; box-shadow: 0 6px 14px -6px rgba(30, 58, 138, .6);
+  }
+  .brand-name { font-size: 16px; font-weight: 700; letter-spacing: .2px; }
+  .brand-ver { font-size: 11px; color: #6b7280; font-weight: 600; margin-left: 4px; }
+  h1 { font-size: 20px; margin: 18px 0 4px; letter-spacing: .3px; }
+  .sub { margin: 0 0 20px; font-size: 12.5px; color: #6b7280; }
+  label { display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin: 0 0 6px; }
+  .field { margin-bottom: 14px; }
+  input[type=text], input[type=password] {
+    width: 100%; height: 40px; padding: 0 12px; font-size: 14px; color: #111827;
+    border: 1px solid #d1d5db; border-radius: 9px; background: #fff; outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, .16); }
+  .captcha-row { display: flex; gap: 10px; align-items: stretch; }
+  .captcha-row input { flex: 1; }
+  .captcha-box {
+    width: 120px; height: 40px; border: 1px solid #d1d5db; border-radius: 9px; overflow: hidden;
+    cursor: pointer; background: #eef2ff; display: grid; place-items: center; flex: none;
+    position: relative;
+  }
+  .captcha-box svg { width: 120px; height: 38px; display: block; }
+  .captcha-box .ph { font-size: 11px; color: #6b7280; }
+  .captcha-tip { font-size: 11.5px; color: #9ca3af; margin-top: 5px; }
+  button[type=submit] {
+    width: 100%; height: 42px; margin-top: 6px; border: 0; border-radius: 10px; cursor: pointer;
+    background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #fff; font-size: 14.5px;
+    font-weight: 700; letter-spacing: .5px; transition: transform .05s, filter .15s;
+  }
+  button[type=submit]:hover { filter: brightness(1.06); }
+  button[type=submit]:active { transform: translateY(1px); }
+  button[type=submit][disabled] { opacity: .7; cursor: default; }
+  .msg {
+    margin-top: 12px; min-height: 18px; font-size: 12.5px; color: #b91c1c; text-align: center;
+    word-break: break-word;
+  }
+  .msg.ok { color: #047857; }
+  .foot { margin-top: 18px; padding-top: 14px; border-top: 1px dashed #e5e7eb; font-size: 11.5px; color: #9ca3af; text-align: center; }
+</style>
+</head>
+<body>
+  <form class="card" id="loginForm" autocomplete="on">
+    <div class="brand">
+      <div class="logo">DL</div>
+      <div>
+        <div class="brand-name">durlinks-demo <span class="brand-ver">v1.8.26</span></div>
+        <div class="sub" style="margin:2px 0 0">链接仓库 · 管理控制台</div>
+      </div>
+    </div>
+    <h1>管理员登录</h1>
+    <p class="sub">登录后可管理链接、分组、发布库与 LLM 设置</p>
+
+    <div class="field">
+      <label for="username">账号</label>
+      <input id="username" name="username" type="text" autocomplete="username" autofocus required>
+    </div>
+
+    <div class="field">
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+
+    <div class="field">
+      <label for="captcha">验证码</label>
+      <div class="captcha-row">
+        <input id="captcha" name="captcha" type="text" inputmode="text" autocomplete="off"
+               maxlength="6" placeholder="输入右侧字符" required>
+        <div class="captcha-box" id="captchaBox" title="点击刷新"><span class="ph">加载中…</span></div>
+      </div>
+      <div class="captcha-tip">看不清？点图片刷新</div>
+    </div>
+
+    <button type="submit" id="submitBtn">登 录</button>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+    <div class="foot">Durlinks · Go 版 · 账号由管理员分配</div>
+  </form>
+
+<script>
+(function () {
+  var capId = '';
+  var box = document.getElementById('captchaBox');
+  var msg = document.getElementById('msg');
+  var form = document.getElementById('loginForm');
+  var btn = document.getElementById('submitBtn');
+
+  function show(text, ok) {
+    msg.textContent = text || '';
+    msg.className = 'msg' + (ok ? ' ok' : '');
+  }
+
+  function loadCaptcha() {
+    box.innerHTML = '<span class="ph">加载中…</span>';
+    fetch('/api/auth/captcha', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        capId = d.id || '';
+        box.innerHTML = d.svg || '<span class="ph">加载失败</span>';
+      })
+      .catch(function () { box.innerHTML = '<span class="ph">加载失败</span>'; });
+  }
+
+  box.addEventListener('click', loadCaptcha);
+  loadCaptcha();
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var username = document.getElementById('username').value.trim();
+    var password = document.getElementById('password').value;
+    var code = document.getElementById('captcha').value.trim();
+    if (!username || !password || !code) { show('请填写账号、密码和验证码'); return; }
+
+    btn.disabled = true;
+    show('登录中…', true);
+    fetch('/api/auth/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password, captchaId: capId, captchaCode: code })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        return { ok: r.ok, status: r.status, data: d };
+      });
+    }).then(function (res) {
+      if (res.ok) {
+        // 页面导航靠 HttpOnly cookie；控制台里的 fetch 走 Bearer，需要把 token 放进 localStorage
+        try { if (res.data && res.data.token) localStorage.setItem('durlinks_token', res.data.token); } catch (e) {}
+        show('登录成功，正在进入…', true);
+        location.replace('/console');
+        return;
+      }
+      btn.disabled = false;
+      document.getElementById('captcha').value = '';
+      loadCaptcha();
+      if (res.status === 429) { show(res.data.message || '尝试次数过多，请稍后再试'); return; }
+      show(res.data.message || ('登录失败（' + res.status + '）'));
+    }).catch(function () {
+      btn.disabled = false;
+      loadCaptcha();
+      show('网络异常，请稍后重试');
+    });
+  });
+})();
+</script>
+</body>
+</html>

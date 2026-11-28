@@ -471,6 +471,9 @@ func (a *App) adminHandler() http.Handler {
 		// go 模式：管理控制台由 Go 渲染（模板 + embed），不再依赖 Blazor 产物
 		if a.adminWebMode == "go" {
 			switch {
+			case path == "/" || path == "/login" || path == "/login.html":
+				a.handleAdminLoginPage(w, r)
+				return
 			case path == "/console" || path == "/console/":
 				a.handleConsole(w, r)
 				return
