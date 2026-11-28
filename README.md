@@ -246,7 +246,7 @@ cp /opt/durlinks/app/appsettings.json /backup/
 
 ## 七、Excel 导入
 
-模板：`program-durlinks-demos-导入模板.xlsx`（含「填写说明」sheet 与列校验）。
+模板：管理端「导入 Excel」弹窗里的 **↓ 下载导入模板** 直接下载（模板已内置进二进制，部署时不用再额外带文件；要自定义就放 `templates/导入模板.xlsx` 覆盖）。
 
 14 列：序号 / 链接形式 / 分类 / 名称 / 链接 / 提取码 / 网盘过期时间 / 平台 / 版本 / 附属链接 / 添加时间 / 标签 / 备注 / AI摘要。
 

@@ -13,12 +13,7 @@ cd "$ROOT/src/Durlinks.GoServer"
 
 mkdir -p "$OUT/data" "$OUT/templates" "$OUT/wwwroot-user" "$OUT/wwwroot-admin"
 
-echo "==> 复制导入模板（仓库根目录）"
-if [ -f "$ROOT/program-durlinks-demos-导入模板.xlsx" ]; then
-    cp -f "$ROOT/program-durlinks-demos-导入模板.xlsx" "$OUT/templates/导入模板.xlsx"
-else
-    echo "    [警告] 未找到 program-durlinks-demos-导入模板.xlsx，导入模板下载将不可用"
-fi
+echo "==> 导入模板已内置进二进制（如需自定义，放 templates/导入模板.xlsx 覆盖）"
 
 echo "==> 生成 appsettings.json（已存在则保留）"
 if [ ! -f "$OUT/appsettings.json" ]; then

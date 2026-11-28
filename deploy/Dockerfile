@@ -12,6 +12,6 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata && mkdir -p /app/data /app/templates
 WORKDIR /app
 COPY --from=build /durlinks-server /app/durlinks-server
-COPY program-durlinks-demos-导入模板.xlsx /app/templates/导入模板.xlsx
+# 导入模板已 go:embed 进二进制；/app/templates 保留给需要自定义模板的场景
 EXPOSE 8789 8788
 ENTRYPOINT ["/app/durlinks-server"]

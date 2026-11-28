@@ -29,7 +29,7 @@ appsettings.Production.json
 .workbuddy/
 .local-docs/
 
-# 历史 .NET 源码与解决方案：仅本地保留作迁移参考，不入库、不推送
+# 历史 .NET 源码与解决方案：已在 v1.8.26 后彻底移除，仅留作忽略规则防误提交
 /src/Durlinks.Server/
 /src/Durlinks.Web/
 /src/Durlinks.AdminWeb/
@@ -44,11 +44,9 @@ appsettings.Production.json
 /src/Durlinks.GoServer/*.exe
 *.exe
 
-# 本地数据表（真实书签/导入导出），只保留导入模板
+# 本地数据表（真实书签/导入导出），只保留内置进二进制的导入模板
 *.xlsx
-!program-durlinks-demos-导入模板.xlsx
-!src/Durlinks.Server/templates/导入模板.xlsx
-!src/Durlinks.Server/program-durlinks-demos-优化版.xlsx
+!src/Durlinks.GoServer/templates/import-template.xlsx
 
 # 本地联调临时目录（mock LLM / playwright / 测试库 / 发布产物）
 .tmp-test/

@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -14,6 +15,17 @@ import (
 	"time"
 
 	"github.com/xuri/excelize/v2"
+)
+
+// 导入模板随二进制内置：单文件部署不再需要额外携带 xlsx。
+//
+//go:embed templates/import-template.xlsx
+var importTemplateXLSX []byte
+
+const (
+	xlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	// 同时给 ASCII 回退名与 RFC 5987 中文名，浏览器保存为「导入模板.xlsx」
+	xlsxAttachment = `attachment; filename="import-template.xlsx"; filename*=UTF-8''%E5%AF%BC%E5%85%A5%E6%A8%A1%E6%9D%BF.xlsx`
 )
 
 // ======================= Excel 解析（等价 ExcelImportService） =======================
@@ -401,19 +413,27 @@ func (a *App) importParsedLinks(links []*parsedLink, libraryID int, source Impor
 }
 
 // handleImportTemplate GET /api/admin/import/template
+// 磁盘上的同名模板优先（方便替换自定义模板），没有则回落到二进制内置的模板。
 func (a *App) handleImportTemplate(w http.ResponseWriter, r *http.Request) {
 	candidates := []string{
 		filepath.Join(a.baseDir, "templates", "导入模板.xlsx"),
+		filepath.Join(a.baseDir, "templates", "import-template.xlsx"),
 	}
 	for _, p := range candidates {
 		if fileExists(p) {
-			w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-			w.Header().Set("Content-Disposition", `attachment; filename="import-template.xlsx"`)
+			w.Header().Set("Content-Type", xlsxContentType)
+			w.Header().Set("Content-Disposition", xlsxAttachment)
 			http.ServeFile(w, r, p)
 			return
 		}
 	}
-	writeErr(w, http.StatusNotFound, "导入模板文件不存在")
+	w.Header().Set("Content-Type", xlsxContentType)
+	w.Header().Set("Content-Disposition", xlsxAttachment)
+	w.Header().Set("Content-Length", strconv.Itoa(len(importTemplateXLSX)))
+	w.Header().Set("Cache-Control", "no-store")
+	if _, err := w.Write(importTemplateXLSX); err != nil {
+		return
+	}
 }
 
 func readUpload(w http.ResponseWriter, r *http.Request, maxBytes int64) (multipart.File, *multipart.FileHeader, error) {
