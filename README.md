@@ -18,17 +18,15 @@
 需要 Go 1.27+（仓库 `go.mod` 指定；Go 会自动下载对应 toolchain）。
 
 ```bash
-# Linux / macOS / Git Bash
+# 本机平台编译：Linux/macOS 产物 run/durlinks-server，Windows 为 run/durlinks-server.exe
 bash deploy/go/build-local.sh
-
-# 产物：run/durlinks-server.exe（Windows 下就是 durlinks-server.exe，Linux 下同样可直接执行）
 ```
 
-想交叉编译到别的平台：
+要部署到 Linux 服务器，用交叉编译脚本（产物是静态二进制，拷过去就能跑）：
 
 ```bash
-cd src/Durlinks.GoServer
-GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o durlinks-server .
+bash deploy/go/build-linux.sh          # amd64，产物 dist/durlinks-server-linux-amd64
+bash deploy/go/build-linux.sh arm64    # ARM 服务器
 ```
 
 ### 2. 配置
@@ -53,7 +51,7 @@ GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o durlinks-server .
 
 ```bash
 cd run
-./durlinks-server.exe
+./durlinks-server          # Windows：durlinks-server.exe
 ```
 
 - 用户端：<http://localhost:8789>（免登录）
@@ -106,39 +104,43 @@ cd run
 ### 4.1 Linux 二进制 + systemd（推荐单机）
 
 ```bash
-# 1) 编译（在开发机或服务器上都行）
-bash deploy/go/build-local.sh
+# 1) 交叉编译（在开发机执行；产物是 Linux 静态二进制，约 21MB，目标机不需要装 Go）
+bash deploy/go/build-linux.sh              # amd64
+bash deploy/go/build-linux.sh arm64        # ARM 服务器
 
-# 2) 部署目录
-sudo mkdir -p /opt/durlinks/{app,data}
-sudo cp run/durlinks-server.exe /opt/durlinks/app/durlinks-server
-sudo chmod +x /opt/durlinks/app/durlinks-server
-sudo cp run/appsettings.json /opt/durlinks/app/appsettings.json
-# 编辑配置：Host=0.0.0.0，Jwt:Secret 换成随机串，Database:Path=/opt/durlinks/data/durlinks.db
+# 2) 服务用户与目录（SQLite 要写 data/，不能用 nobody）
+sudo useradd -r -s /usr/sbin/nologin durlinks 2>/dev/null || true
+sudo mkdir -p /opt/durlinks/app /opt/durlinks/data
+sudo install -m 0755 dist/durlinks-server-linux-amd64 /opt/durlinks/app/durlinks-server
+sudo chown -R durlinks:durlinks /opt/durlinks
 
-# 3) systemd 单元
-sudo tee /etc/systemd/system/durlinks.service >/dev/null <<'EOF'
-[Unit]
-Description=Durlinks Go Server
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/durlinks/app
-ExecStart=/opt/durlinks/app/durlinks-server
-Restart=always
-RestartSec=3
-User=nobody
-Group=nogroup
-
-[Install]
-WantedBy=multi-user.target
+# 3) 配置：放二进制同目录，程序启动时自动读 appsettings.json
+sudo tee /opt/durlinks/app/appsettings.json >/dev/null <<'EOF'
+{
+  "Database": { "Provider": "sqlite", "Path": "/opt/durlinks/data/durlinks.db" },
+  "Kestrel": { "Host": "0.0.0.0" },
+  "Ports": { "Public": 8789, "Admin": 8788 },
+  "Web": { "Mode": "go", "AdminMode": "go" },
+  "Jwt": { "Secret": "换成 openssl rand -base64 48 的输出" }
+}
 EOF
+sudo chown durlinks:durlinks /opt/durlinks/app/appsettings.json
+sudo chmod 600 /opt/durlinks/app/appsettings.json
 
+# 4) systemd（单元文件仓库里现成的：deploy/durlinks.service）
+sudo cp deploy/durlinks.service /etc/systemd/system/durlinks.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now durlinks
-sudo systemctl status durlinks
+sudo systemctl status durlinks --no-pager
 ```
+
+要点：
+
+- **JWT 密钥必须 ≥32 位**，否则生产模式直接拒绝启动（含 `CHANGE_ME`、`dev-` 占位符也会被拒）；只做本地调试可设 `DURLINKS_ENV=development`。
+- 用 PostgreSQL：`Database.Provider` 改 `postgres`，再加 `"ConnectionStrings": { "Postgres": "Host=...;Port=5432;Database=durlinks;Username=durlinks;Password=..." }`；也可以完全走环境变量（见 4.4）。
+- 不想用配置文件，就在 unit 里加 `EnvironmentFile=/etc/durlinks/durlinks.env`，键值统一用 `DURLINKS_*`。
+- **导入模板已内置进二进制**，不用再往服务器拷 xlsx；要自定义就放 `/opt/durlinks/app/templates/导入模板.xlsx` 覆盖。
+- 升级 = 换 `/opt/durlinks/app/durlinks-server` + `sudo systemctl restart durlinks`；数据始终在 `/opt/durlinks/data/`。
 
 防火墙只放行反代机器；直接暴露时放行 8789/8788，但**管理端 8788 不要裸露公网**。
 
@@ -160,15 +162,18 @@ deploy\windows\stop.bat              :: 停止
 仓库自带 Go 版 Dockerfile（`deploy/Dockerfile`，多阶段构建，最终镜像只有单个二进制 + CA 证书），开箱即用：
 
 ```bash
-# SQLite 单机：一条命令起
-docker compose -f deploy/docker-compose.yml up -d --build
+# SQLite 单机：JWT 密钥必须≥32 位，直接一条命令起
+JWT_SECRET="$(openssl rand -base64 48)" \
+  docker compose -f deploy/docker-compose.yml up -d --build
 
-# PostgreSQL 生产：先建 .env（PG_PASSWORD、JWT_SECRET），再起
+# PostgreSQL 生产：先 cp deploy/.env.example deploy/.env，改 PG_PASSWORD / JWT_SECRET，再起
 docker compose -f deploy/docker-compose.prod.yml up -d
 
 # 或单独构建镜像
 docker build -f deploy/Dockerfile -t durlinks-demo:latest .
 ```
+
+Compose 文件在 `deploy/` 下，**要在仓库根目录执行**（构建上下文是仓库根）。
 
 Go 服务端直接渲染两个端口，不需要 nginx / 静态站容器。环境变量方式与 4.4 相同。
 

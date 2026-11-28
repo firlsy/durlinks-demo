@@ -7,9 +7,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$ROOT/run"
 GO_BIN="${GO:-go}"
 
-echo "==> 编译 Go 服务端"
+# Windows（Git Bash/MSYS）加 .exe，Linux/macOS 不加，避免把 .exe 当 Linux 二进制拷来拷去
+BIN="durlinks-server"
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) BIN="durlinks-server.exe" ;;
+esac
+
+echo "==> 编译 Go 服务端（本机平台，产物 $BIN）"
 cd "$ROOT/src/Durlinks.GoServer"
-"$GO_BIN" build -trimpath -ldflags "-s -w" -o "$OUT/durlinks-server.exe" .
+"$GO_BIN" build -trimpath -ldflags "-s -w" -o "$OUT/$BIN" .
 
 mkdir -p "$OUT/data" "$OUT/templates" "$OUT/wwwroot-user" "$OUT/wwwroot-admin"
 
@@ -31,5 +37,6 @@ EOF
     echo "    已写入随机 JWT 密钥"
 fi
 
-echo "==> 完成：$OUT/durlinks-server.exe"
-echo "    启动：cd \"$OUT\" && ./durlinks-server.exe"
+echo "==> 完成：$OUT/$BIN"
+echo "    启动：cd \"$OUT\" && ./$BIN"
+echo "    Linux 服务器请改用 deploy/go/build-linux.sh 交叉编译"

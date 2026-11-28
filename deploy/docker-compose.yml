@@ -11,7 +11,8 @@ services:
     container_name: durlinks
     environment:
       DURLINKS_HOST: "0.0.0.0"
-      DURLINKS_JWT_SECRET: "${JWT_SECRET:-CHANGE_ME_TO_A_LONG_RANDOM_SECRET_AT_DEPLOY}"
+      # 必填：JWT 密钥至少 32 位，占位符会被服务端拒绝
+      DURLINKS_JWT_SECRET: "${JWT_SECRET:?请先 export JWT_SECRET=\"$(openssl rand -base64 48)\" 或写进 deploy/.env}"
       TZ: Asia/Shanghai
     volumes:
       - ../data:/app/data
