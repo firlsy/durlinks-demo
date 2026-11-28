@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 本地构建 + 部署 Go 服务端到 <项目根>/run
-# 用法：bash deploy/go/build-local.sh [--publish-web]
+# 用法：bash deploy/go/build-local.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -13,17 +13,12 @@ cd "$ROOT/src/Durlinks.GoServer"
 
 mkdir -p "$OUT/data" "$OUT/templates" "$OUT/wwwroot-user" "$OUT/wwwroot-admin"
 
-echo "==> 复制导入模板"
-if [ -f "$ROOT/src/Durlinks.Server/templates/导入模板.xlsx" ]; then
-    cp -f "$ROOT/src/Durlinks.Server/templates/导入模板.xlsx" "$OUT/templates/导入模板.xlsx"
+echo "==> 复制导入模板（仓库根目录）"
+if [ -f "$ROOT/program-durlinks-demos-导入模板.xlsx" ]; then
+    cp -f "$ROOT/program-durlinks-demos-导入模板.xlsx" "$OUT/templates/导入模板.xlsx"
+else
+    echo "    [警告] 未找到 program-durlinks-demos-导入模板.xlsx，导入模板下载将不可用"
 fi
-
-echo "==> 复制静态站（用户端由 Go 直出，此目录仅 Web.Mode=static 回退时使用）"
-cp -rf "$ROOT/src/Durlinks.AdminWeb/wwwroot/." "$OUT/wwwroot-admin/" 2>/dev/null || true
-if [ -f "$ROOT/src/Durlinks.AdminWeb/login-assets/login.html" ]; then
-    cp -f "$ROOT/src/Durlinks.AdminWeb/login-assets/login.html" "$OUT/wwwroot-admin/login.html"
-fi
-cp -rf "$ROOT/src/Durlinks.Web/wwwroot/." "$OUT/wwwroot-user/" 2>/dev/null || true
 
 echo "==> 生成 appsettings.json（已存在则保留）"
 if [ ! -f "$OUT/appsettings.json" ]; then

@@ -404,7 +404,6 @@ func (a *App) importParsedLinks(links []*parsedLink, libraryID int, source Impor
 func (a *App) handleImportTemplate(w http.ResponseWriter, r *http.Request) {
 	candidates := []string{
 		filepath.Join(a.baseDir, "templates", "导入模板.xlsx"),
-		filepath.Join(a.baseDir, "..", "src", "Durlinks.Server", "templates", "导入模板.xlsx"),
 	}
 	for _, p := range candidates {
 		if fileExists(p) {

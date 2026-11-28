@@ -2,7 +2,7 @@
 
 ## 当前版本：v1.8.26
 
-> v1.8.26：默认管理员改为 `admin / admin123`（可用环境变量 `DURLINKS_ADMIN_PASSWORD` 覆盖）；补齐部署体系——二进制、Docker、Compose、Windows 服务、飞牛 fnOS FPK 与反向代理文档；新增一键构建脚本与示例配置；仓库移除本地记忆目录与真实书签数据，重建为单一初始提交。
+> v1.8.26：默认管理员 `admin / admin123`；用户端与管理端全部迁到 Go 服务端直出，彻底摆脱 .NET 运行时；补齐 Go 单二进制部署体系（systemd / Docker Compose / Windows 脚本）；仓库清洗——移除 .NET 源码、私人运维脚本、记忆目录与真实书签数据。
 >
 > v1.8.25：导入弹窗不再回放上一次导入的完成提示（新开页面/重开弹窗只显示仍在运行的任务进度）；移除提示里的「（如 8 万行）」示例。
 >
@@ -102,16 +102,16 @@
 
 ## 版本号写在哪
 
-- `Directory.Build.props`：统一设 `Version` / `AssemblyVersion` / `FileVersion` / `InformationalVersion`（所有项目继承）
-- 管理端登录页品牌区 + 侧栏：`v1.7.0` 标签（`Home.razor` 两处、`login.html` 一处）
-- `README.md` 标题
-- `src/Durlinks.AdminWeb/wwwroot/index.html`：`admin.css?v=1.7.0`
-- Docker 镜像 tag：`durlinks-demo-api:v1.7.0`
+- `README.md` 标题与版本说明
+- `docs/VERSION.md` 本文档「当前版本」与版本历史
+- Docker 镜像 tag（如 `durlinks-demo:v1.8.26`）
+
+Go 服务端前端资源通过 `go:embed` 编进二进制，模板 / CSS / JS 的缓存指纹在 `webadmin/templates/admin.html` 里（`admin.css?v=N`、`admin.js?v=N`）。
 
 ## 升级版本时 checklist
 
-1. 改 `Directory.Build.props` 的 Version（含注释共 5 处）
-2. 改 `Home.razor` 里两处、`login.html` 里一处版本标签
-3. 改 `README.md` 标题、`index.html` 的 CSS 指纹（CSS 文件名无指纹，靠 query 破缓存）
-4. 改本文档「当前版本」与版本历史
-5. 重新 publish + 构建镜像（用新 tag）+ 重启容器；静态目录必须清空再整体覆盖
+1. 改 `README.md` 标题与版本说明
+2. 若前端有改动，递增 `admin.html` 里的 `admin.css?v=N` / `admin.js?v=N` 破缓存
+3. 改本文档「当前版本」与版本历史
+4. `go vet ./...` + `bash deploy/go/build-local.sh` 重新编译（前端资源靠 embed，不重编译不生效）
+5. 重启服务；Docker 场景用新 tag 构建镜像并重建容器

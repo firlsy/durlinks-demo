@@ -69,15 +69,14 @@ cd run
 
 | 路径 | 说明 |
 |---|---|
-| `src/Durlinks.GoServer` | **当前主力**：Go 服务端，单二进制，SSR 用户端 + 管理端 |
-| `web/` · `webadmin/` | Go 服务端内嵌的前端模板与静态资源（`go:embed`） |
-| `src/Durlinks.Server` | 历史 .NET 后端（保留作迁移参考，**部署不需要**） |
-| `src/Durlinks.Web` · `src/Durlinks.AdminWeb` | 历史 Blazor 前端（保留作界面参考，**部署不需要**） |
-| `src/Durlinks.Desktop` | Avalonia 桌面客户端（可选，纯搜索） |
+| `src/Durlinks.GoServer` | **全部**：Go 服务端，单二进制，SSR 用户端 + 管理端 |
+| `web/` · `webadmin/` | Go 服务端内嵌的前端模板与静态资源（`go:embed`，位于 `src/Durlinks.GoServer/` 下） |
 | `deploy/go/` | Go 构建与本地启动脚本 |
 | `deploy/windows/` | Windows 一键启动脚本（GBK/ANSI 编码，含端口守卫） |
-| `deploy/` | Docker / Compose / systemd / fnOS 打包等 |
-| `docs/` | 数据库、备份迁移、版本记录 |
+| `deploy/` | Go 版 Dockerfile / Compose / systemd 单元 |
+| `docs/` | 数据库配置、版本记录 |
+
+历史 .NET 源码（Server / Web / AdminWeb / Shared / Desktop）已从版本控制移除，仅本地保留作迁移参考，不推送、不需要。
 
 技术栈：Go · `net/http` + `html/template` + `go:embed` · SQLite（modernc）/ PostgreSQL（pgx）· JWT + PBKDF2。
 
@@ -158,24 +157,20 @@ deploy\windows\stop.bat              :: 停止
 
 ### 4.3 Docker Compose（PostgreSQL）
 
-Go 版镜像可直接用多阶段构建（源码里 `deploy/Dockerfile` 为历史 .NET 版，Go 自用示例如下）：
+仓库自带 Go 版 Dockerfile（`deploy/Dockerfile`，多阶段构建，最终镜像只有单个二进制 + CA 证书），开箱即用：
 
-```dockerfile
-FROM golang:1.27-alpine AS build
-WORKDIR /src
-COPY src/Durlinks.GoServer/ .
-RUN go build -trimpath -ldflags "-s -w" -o /durlinks-server .
+```bash
+# SQLite 单机：一条命令起
+docker compose -f deploy/docker-compose.yml up -d --build
 
-FROM alpine:3.20
-WORKDIR /app
-COPY --from=build /durlinks-server .
-RUN mkdir -p /app/data /app/templates
-COPY program-durlinks-demos-导入模板.xlsx /app/templates/导入模板.xlsx
-EXPOSE 8789 8788
-ENTRYPOINT ["/app/durlinks-server"]
+# PostgreSQL 生产：先建 .env（PG_PASSWORD、JWT_SECRET），再起
+docker compose -f deploy/docker-compose.prod.yml up -d
+
+# 或单独构建镜像
+docker build -f deploy/Dockerfile -t durlinks-demo:latest .
 ```
 
-配合 `deploy/docker-compose.prod.yml`（把 `api` 段的镜像换成自己构建的 Go 镜像、挂载 `appsettings.json` 即可）。环境变量方式与 4.4 相同。
+Go 服务端直接渲染两个端口，不需要 nginx / 静态站容器。环境变量方式与 4.4 相同。
 
 ### 4.4 纯环境变量启动（容器 / 无配置文件场景）
 
@@ -224,21 +219,28 @@ CREATE USER durlinks WITH PASSWORD '换成强口令';
 CREATE DATABASE durlinks OWNER durlinks;
 ```
 
-切换后端不会自动搬数据；用管理端「导出数据包」或备份脚本迁移。表结构由服务端幂等升级。
+切换后端不会自动搬数据；用管理端「导出数据包 / 导出 Excel」迁移。表结构由服务端幂等升级。
 
 ---
 
-## 六、备份 / 恢复 / 换机
+## 六、备份 / 恢复
+
+Go 单二进制部署没有独立的静态站目录，备份很简单：
 
 ```bash
-# 备份（数据库 + 运行配置）
-/opt/durlinks-demo/deploy/backup.sh
+# SQLite：停服后直接拷数据库文件
+cp /opt/durlinks/data/durlinks.db /backup/durlinks-$(date +%F).db
 
-# 恢复演练
-./deploy/restore.sh backups/durlinks-xxx.tar.gz --yes --db-name durlinks_verify
+# PostgreSQL：pg_dump
+pg_dump -U durlinks -Fc durlinks > durlinks-$(date +%F).dump
+
+# 连同运行配置一起留存
+cp /opt/durlinks/app/appsettings.json /backup/
 ```
 
-详细步骤见 [`docs/BACKUP-AND-MIGRATE.md`](docs/BACKUP-AND-MIGRATE.md)。
+恢复时反向操作：放回数据库文件 / `pg_restore` 导入，再把 `appsettings.json` 放回程序目录，重启服务。
+
+跨机器换系统时用管理端「导出数据包」拿到 zip（含链接、发布库、统计），在新机导入即可。数据库配置详见 [`docs/DATABASE.md`](docs/DATABASE.md)。
 
 ---
 

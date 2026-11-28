@@ -29,6 +29,15 @@ appsettings.Production.json
 .workbuddy/
 .local-docs/
 
+# 历史 .NET 源码与解决方案：仅本地保留作迁移参考，不入库、不推送
+/src/Durlinks.Server/
+/src/Durlinks.Web/
+/src/Durlinks.AdminWeb/
+/src/Durlinks.Shared/
+/src/Durlinks.Desktop/
+/Durlinks.slnx
+/Directory.Build.props
+
 # Go 服务端：本地构建与部署目录
 /run/
 /src/Durlinks.GoServer/durlinks-server.exe

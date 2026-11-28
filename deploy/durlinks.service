@@ -1,14 +1,13 @@
 [Unit]
-Description=Durlinks Demo (public :8789 / admin :8788)
-After=network-online.target postgresql.service
+Description=Durlinks Go Server (public :8789 / admin :8788)
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 # 按实际部署目录修改
-WorkingDirectory=/opt/durlinks-demo/app
-ExecStart=/opt/durlinks-demo/app/Durlinks.Server
-Environment=ASPNETCORE_ENVIRONMENT=Production
+WorkingDirectory=/opt/durlinks/app
+ExecStart=/opt/durlinks/app/durlinks-server
 # 可选：覆盖首次初始化的管理员口令（不设则为 admin123）
 # Environment=DURLINKS_ADMIN_PASSWORD=change-me-now
 Restart=always
@@ -20,7 +19,7 @@ Group=durlinks
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/opt/durlinks-demo/data
+ReadWritePaths=/opt/durlinks/data
 
 [Install]
 WantedBy=multi-user.target

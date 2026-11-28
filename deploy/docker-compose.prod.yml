@@ -1,13 +1,11 @@
-# Durlinks 生产编排（新服务器推荐）：PostgreSQL + API 单容器双端口
+# Durlinks Go 版生产编排：PostgreSQL + Go 单容器双端口
 # 用法：
-#   1) 把本文件放到 /opt/durlinks-demo/docker-compose.prod.yml
-#   2) 同目录建 .env：PG_PASSWORD=...（可选 API_IMAGE）
-#   3) docker compose -f docker-compose.prod.yml up -d
+#   1) 同目录建 .env：PG_PASSWORD=...、JWT_SECRET=...（可选 API_IMAGE）
+#   2) docker compose -f docker-compose.prod.yml up -d
 # 说明：
-#   - 容器内仍用 /opt/durlinks-demo/admin|web 路径，直接复用备份里的 appsettings
-#   - 对外只绑 127.0.0.1，公网入口交给 Lucky 反代（与现网一致）
-#   - 数据库连接由环境变量覆盖 appsettings，迁移时无需改配置文件
-
+#   - Go 服务端直接渲染用户端/管理端，不需要 nginx 与静态站容器
+#   - 对外只绑 127.0.0.1，公网入口交给反向代理（Nginx / Caddy / Lucky）
+#   - 数据库与 JWT 走环境变量覆盖，迁移时无需改配置文件
 name: durlinks
 
 services:
@@ -29,21 +27,18 @@ services:
     restart: unless-stopped
 
   api:
-    image: ${API_IMAGE:-durlinks-demo-api:latest}
+    image: ${API_IMAGE:-durlinks-demo:latest}
     container_name: durlinks-demo-api
     depends_on:
       db:
         condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      Database__Provider: postgres
-      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=${PG_DATABASE:-durlinks_demo};Username=${PG_USER:-durlinks_demo};Password=${PG_PASSWORD}"
-      Kestrel__Host: 0.0.0.0
+      DURLINKS_DB_PROVIDER: postgres
+      DURLINKS_POSTGRES: "Host=db;Port=5432;Database=${PG_DATABASE:-durlinks_demo};Username=${PG_USER:-durlinks_demo};Password=${PG_PASSWORD}"
+      DURLINKS_HOST: "0.0.0.0"
+      DURLINKS_JWT_SECRET: "${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}"
+      TZ: Asia/Shanghai
     volumes:
-      - ./server/appsettings.Production.json:/app/appsettings.Production.json:ro
-      - ./server/导入模板.xlsx:/app/templates/导入模板.xlsx:ro
-      - ./admin:/opt/durlinks-demo/admin:ro
-      - ./web:/opt/durlinks-demo/web:ro
       - ./data:/app/data
     ports:
       - "127.0.0.1:8789:8789"

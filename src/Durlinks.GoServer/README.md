@@ -1,6 +1,6 @@
 # Durlinks Go 服务端
 
-原 `Durlinks.Server`（ASP.NET Core）的 Go 重写版。单进程监听两个端口，行为、路由、JSON 契约与原服务端保持一致：
+Durlinks 链接仓库的 Go 服务端（由原 ASP.NET Core 版重写）。单进程监听两个端口，行为、路由、JSON 契约与原服务端保持一致：
 
 - 用户端 `:8789` —— 只读，仅放行公开搜索的 GET 接口
 - 管理端 `:8788` —— 全权限，除登录/验证码外均需 JWT
@@ -32,8 +32,8 @@ DURLINKS_JWT_SECRET="<至少32位随机串>" ./durlinks-server.exe -base /opt/du
 appsettings.json     配置（也支持 config.json）
 data/durlinks.db     SQLite 数据库（provider=postgres 时不使用）
 templates/导入模板.xlsx
-wwwroot-user/        用户端静态站（Blazor Web 发布产物）
-wwwroot-admin/       管理端静态站（含 login.html）
+wwwroot-user/        可选：static 模式的用户端静态站（需自备，go 模式不需要）
+wwwroot-admin/       可选：static 模式的管理端静态站（go 模式不需要）
 ```
 
 ## 配置
@@ -57,9 +57,9 @@ wwwroot-admin/       管理端静态站（含 login.html）
 | 键 | 值 | 行为 | 依赖 |
 | --- | --- | --- | --- |
 | `Web.Mode` | `go`（默认） | Go 用 `html/template` 渲染用户端首页，模板与 CSS 用 `embed` 打进二进制 | **零前端产物**，首屏约 36KB |
-| | `static` | 回退到托管 `wwwroot-user` 里的 Blazor WASM 产物 | 需要跑过 `dotnet publish`，首屏要拉 27MB |
+| | `static` | 回退到托管自带目录 `wwwroot-user` 的静态站 | 需自备静态产物，仓库不含；一般不用 |
 | `Web.AdminMode` | `go`（默认） | Go 渲染管理控制台 `/console`（模板 + `embed`），页面鉴权走登录时下发的 HttpOnly cookie | **零前端产物** |
-| | `static` | 回退到托管 `wwwroot-admin` 的 Blazor 版控制台 | 需要 `wwwroot-admin` 产物 |
+| | `static` | 回退到托管自带目录 `wwwroot-admin` 的静态站 | 需自备静态产物，仓库不含；一般不用 |
 
 交互用普通 GET 表单 + 链接（筛选、翻页、库切换都体现在 URL 上，可分享可后退），行操作（隐藏/删除/AI 补料）与编辑保存由一小段内联 JS 调既有 API。
 
@@ -99,8 +99,8 @@ wwwroot-admin/       管理端静态站（含 login.html）
 `400 尚未配置可用的 LLM`。协议按 OpenAI 兼容实现（`POST {endpoint}/v1/chat/completions`），
 本地 Ollama、中转站、官方 OpenAI 都能直接用；填 `/v1`、`/v1/chat/completions` 或只填域名都会被自动补全。
 
-补料提示词与 C# 版一致：标签最多 5 个、摘要不超过 50 字，结果以 JSON 返回；
-写回时**摘要覆盖、标签只增不删**（不会抹掉人工打的标签）。
+补料提示词要求按名称与链接指向内容生成 2–4 个标准短标签（禁止组织名、孤立版本、状态词、域名与泛词），摘要简洁，结果以 JSON 返回；
+写回时**摘要覆盖、标签只增不删**（不会抹掉人工打的标签）。标签库可用「分组管理 → 标签 → 整理标签」做历史归一。
 
 ## 与 C# 版的兼容性
 
